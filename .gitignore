@@ -1,0 +1,16 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# Tauri 构建产物
+src-tauri/target/
+
+# 派生数据（SPEC-002：禁止提交派生数据）
+.index/
+.backup/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+release/
