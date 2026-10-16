@@ -35,6 +35,7 @@ pub fn run() {
             ai_chat::open_corpus_folder,
             config_topics::config_get_topics,
             config_topics::config_set_topics,
+            fs_cmds::open_url_https,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -11,6 +11,21 @@
 
 ---
 
+## [0.2.1] - 2026-10-17
+
+### 新增
+
+- **软件作者弹窗（设置页）**：设置页底部新增「软件作者」入口——弹窗首行为作者公开仓库地址，
+  其次列出本项目基于的开源项目（Tauri / Svelte / FullCalendar / Milkdown / ECharts，界面风格
+  参考 usememos/memos），并简要介绍本项目与 MIT 开源声明；弹窗内「捐献作者」按钮可展开
+  收款二维码。所有链接点击后经系统默认浏览器打开（仅允许 `https://` 协议）。
+
+### 变更
+
+- LICENSE 版权署名改为 `CompassZha contributors`。
+
+---
+
 ## [0.2.0] - 2026-10-16
 
 阶段四落地：新增「语料对话」与「仪表盘 AI 数据分析」两个 **AI 工作区**。两者都使用你自携的
@@ -77,6 +92,7 @@ API Key，数据仍只保存在本地 Markdown——软件不内置任何密钥�
 - 章节级「手术式写回」：只替换被修改的章节，用户手改内容字节级保留。
 - 全部业务数据以纯 Markdown 文件存储，无数据库、无专有格式，便于 AI 直接读取分析。
 
-[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.0...HEAD
+[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.1
 [0.2.0]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.0
 [0.1.0]: https://github.com/zhadao/CompassZha/releases/tag/v0.1.0

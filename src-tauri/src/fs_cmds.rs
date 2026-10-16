@@ -335,3 +335,31 @@ pub(crate) fn run_git(root: &Path, args: &[&str]) -> Result<(), String> {
         Err(e) => Err(format!("git {} 无法启动：{e}", args.join(" "))),
     }
 }
+
+/* ---- 外部链接（v4.16：设置页「软件作者」弹窗） ---- */
+
+/// 用系统默认浏览器打开 https 链接（仅接受 https:// 前缀，防任意协议注入）。
+/// Windows 下经 `cmd /c start` 打开并加 CREATE_NO_WINDOW（防黑窗闪烁，同 git() 模式）。
+#[tauri::command(async)]
+pub fn open_url_https(url: String) -> Result<(), String> {
+    let u = url.trim();
+    if !u.starts_with("https://") {
+        return Err("只允许打开 https:// 链接".to_string());
+    }
+    #[cfg(windows)]
+    {
+        let mut c = Command::new("cmd");
+        c.args(["/c", "start", "", u]);
+        c.creation_flags(0x0800_0000);
+        c.status().map(|_| ()).map_err(|e| format!("打开浏览器失败：{e}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let prog = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        Command::new(prog)
+            .arg(u)
+            .status()
+            .map(|_| ())
+            .map_err(|e| format!("打开浏览器失败：{e}"))
+    }
+}

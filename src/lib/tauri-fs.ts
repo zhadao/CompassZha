@@ -84,3 +84,7 @@ export const gitSyncSetConfig = (
 /** 立即同步（本地提交 + 推送 + 记 last_sync） */
 export const gitSyncNow = (): Promise<string> =>
   invoke<string>("git_sync_now");
+
+/** 用系统默认浏览器打开 https 链接（v4.16：「软件作者」弹窗外链）。 */
+export const openUrlHttps = (url: string): Promise<void> =>
+  invoke<void>("open_url_https", { url });

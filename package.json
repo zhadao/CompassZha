@@ -1,7 +1,7 @@
 {
   "name": "compasszha",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CompassZha · 本地优先的个人人生仪表盘（Markdown 数据 + Tauri 2 + Svelte 5）",
   "license": "MIT",
   "author": "CompassZha",

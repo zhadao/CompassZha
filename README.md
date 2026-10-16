@@ -341,3 +341,14 @@ Highlights:
 
 Build from source with `npm install` then `npm run tauri dev`; produce a standalone executable with
 `npm run tauri build -- --no-bundle`. Licensed under MIT.
+
+## 致谢 / Acknowledgements
+
+CompassZha 站在以下开源项目的肩膀上（设置页底部「软件作者」弹窗内可一键访问）：
+
+- [Tauri](https://github.com/tauri-apps/tauri) — 桌面应用框架
+- [Svelte](https://github.com/sveltejs/svelte) — 前端框架
+- [FullCalendar](https://github.com/fullcalendar/fullcalendar) — 日历视图
+- [Milkdown](https://github.com/Milkdown/milkdown) — 所见即所得编辑器
+- [ECharts](https://github.com/apache/echarts) — 趋势图表
+- [usememos/memos](https://github.com/usememos/memos) — 界面风格参考（仅视觉借鉴，未使用其代码）
