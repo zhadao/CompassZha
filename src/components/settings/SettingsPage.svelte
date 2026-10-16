@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import StaticBadge from "../layout/StaticBadge.svelte";
   import SettingsHelp from "./SettingsHelp.svelte";
+  import AuthorDialog from "./AuthorDialog.svelte";
   import AiConfigSection from "./AiConfigSection.svelte";
   import {
     gitSyncGetConfig,
@@ -16,6 +17,7 @@
 
   let enabled = false;
   let helpOpen = false;
+  let authorOpen = false;
   let remote = "";
   let branch = "main";
   let token = "";
@@ -167,8 +169,16 @@
     <AiConfigSection />
   {/if}
 
+  <!-- 底部角落：软件作者入口（v4.16） -->
+  <div class="author-corner">
+    <button class="btn-secondary author-btn" onclick={() => (authorOpen = true)}>软件作者</button>
+  </div>
+
   {#if helpOpen}
     <SettingsHelp onclose={() => (helpOpen = false)} />
+  {/if}
+  {#if authorOpen}
+    <AuthorDialog onclose={() => (authorOpen = false)} />
   {/if}
 </div>
 
@@ -257,5 +267,22 @@
 
   .feedback.err {
     color: var(--color-danger, #dc2626);
+  }
+
+  .author-corner {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 560px;
+    margin-top: var(--space-4);
+  }
+
+  .author-btn {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    opacity: 0.75;
+  }
+
+  .author-btn:hover {
+    opacity: 1;
   }
 </style>

@@ -121,19 +121,20 @@ pub fn bootstrap() {
 
 /// §3.3 默认 config.json（version 5，v4.4：corpus_topics 为 RAG 标签路由，去 dir 字段）。
 /// 敏感信息（DeepSeek key 等）不入本文件（SPEC-012）。
+/// v0.2.0：默认卡补 keywords——索引卡是 AI 检索的筛选器，关键词并入检索打分。
 fn default_config_json() -> String {
     let cfg = serde_json::json!({
         "version": 5,
         "data_root": "",
         "corpus_topics": [
-            { "id": "career", "name": "职业与方向" },
-            { "id": "ai-tools", "name": "AI 与工具观" },
-            { "id": "money", "name": "金钱" },
-            { "id": "creation-design", "name": "创作与设计" },
-            { "id": "industry", "name": "行业判断" },
-            { "id": "value-method", "name": "价值判断方法" },
-            { "id": "emotion-self", "name": "情绪与自我" },
-            { "id": "health", "name": "健康" }
+            { "id": "career", "name": "职业与方向", "keywords": ["职业选择", "跳槽", "升职", "转行", "副业", "面试", "工作", "事业"] },
+            { "id": "ai-tools", "name": "AI 与工具观", "keywords": ["AI", "人工智能", "工具", "效率", "软件", "大模型", "自动化"] },
+            { "id": "money", "name": "金钱", "keywords": ["金钱", "收入", "赚钱", "理财", "消费", "财富", "省钱"] },
+            { "id": "creation-design", "name": "创作与设计", "keywords": ["创作", "设计", "写作", "内容", "作品", "审美", "表达"] },
+            { "id": "industry", "name": "行业判断", "keywords": ["行业", "趋势", "市场", "竞争", "商业模式", "公司"] },
+            { "id": "value-method", "name": "价值判断方法", "keywords": ["价值观", "判断", "决策", "思考", "逻辑", "原则"] },
+            { "id": "emotion-self", "name": "情绪与自我", "keywords": ["情绪", "焦虑", "心态", "自我", "成长", "内耗", "压力"] },
+            { "id": "health", "name": "健康", "keywords": ["健康", "睡眠", "运动", "身体", "作息", "饮食", "精力"] }
         ],
         "git": { "enabled": false, "remote": "", "branch": "main" },
         "ai": { "provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "deepseek-chat" },
@@ -332,5 +333,33 @@ pub(crate) fn run_git(root: &Path, args: &[&str]) -> Result<(), String> {
             Ok(())
         }
         Err(e) => Err(format!("git {} 无法启动：{e}", args.join(" "))),
+    }
+}
+
+/* ---- 外部链接（v4.16：设置页「软件作者」弹窗） ---- */
+
+/// 用系统默认浏览器打开 https 链接（仅接受 https:// 前缀，防任意协议注入）。
+/// Windows 下经 `cmd /c start` 打开并加 CREATE_NO_WINDOW（防黑窗闪烁，同 git() 模式）。
+#[tauri::command(async)]
+pub fn open_url_https(url: String) -> Result<(), String> {
+    let u = url.trim();
+    if !u.starts_with("https://") {
+        return Err("只允许打开 https:// 链接".to_string());
+    }
+    #[cfg(windows)]
+    {
+        let mut c = Command::new("cmd");
+        c.args(["/c", "start", "", u]);
+        c.creation_flags(0x0800_0000);
+        c.status().map(|_| ()).map_err(|e| format!("打开浏览器失败：{e}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let prog = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+        Command::new(prog)
+            .arg(u)
+            .status()
+            .map(|_| ())
+            .map_err(|e| format!("打开浏览器失败：{e}"))
     }
 }

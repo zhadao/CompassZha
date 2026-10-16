@@ -25,11 +25,14 @@ export interface AiAnswer {
   citations: CorpusHit[];
 }
 
-/** 设置页 AI 配置（ai_get_config 返回） */
+/** 设置页 AI 配置（data_* 为解析后有效值，含回落；v4.15 双 API） */
 export interface AiConfig {
   base_url: string;
   model: string;
   key_saved: boolean;
+  data_base_url: string;
+  data_model: string;
+  data_key_saved: boolean;
   corpus_dir: string;
   data_root: string;
 }
@@ -48,21 +51,32 @@ export const aiGetConfig = (): Promise<AiConfig> =>
 /**
  * 保存 AI 配置。key 三态语义（同 GitHub PAT）：
  * 非空串 = 写入系统凭据管理器 / 空串 = 清除 / null = 保持不动。
+ * v4.15 双 API：dataBaseUrl/dataModel/dataKey 同语义（data* 空串=清除，回落共用主 API）。
  */
 export const aiSetConfig = (
   baseUrl: string,
   model: string,
   key: string | null,
+  dataBaseUrl: string | null,
+  dataModel: string | null,
+  dataKey: string | null,
 ): Promise<void> =>
   invoke<void>("ai_set_config", {
     baseUrl,
     model,
     key,
+    dataBaseUrl,
+    dataModel,
+    dataKey,
   });
 
 /** 语料对话：扩词 → 检索 corpus/ → 生成（返回回答 + 引用出处） */
 export const aiAsk = (messages: ChatMsg[]): Promise<AiAnswer> =>
   invoke<AiAnswer>("ai_ask", { messages });
+
+/** 数据分析对话（v4.15）：多轮消息 + 前端组装的每日量化数据表 → 返回 AI 分析回答 */
+export const dataAnalyzeAsk = (messages: ChatMsg[], dataText: string): Promise<string> =>
+  invoke<string>("data_analyze_ask", { messages, dataText });
 
 /** 「资源跳转」：用系统资源管理器打开语料文件夹 */
 export const openCorpusFolder = (): Promise<void> =>

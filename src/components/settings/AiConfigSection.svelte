@@ -1,6 +1,7 @@
 <script lang="ts">
   // AI 配置区（阶段 4 · 检查点 4.5）：DeepSeek 直连设置。
   // API key 三态语义同 GitHub PAT：输入非空=写入 / 清除按钮=空串 / 保存时空输入=null（不动）。
+  // v4.15 双 API：数据分析对话可单独接一个 API（提升缓存命中率），不填则回落共用主 API。
   import { onMount } from "svelte";
   import { persist } from "../../lib/tauri-fs";
   import { aiGetConfig, aiSetConfig } from "../../lib/ai";
@@ -10,6 +11,10 @@
   let key = $state("");
   let keySaved = $state(false);
   let corpusDir = $state("");
+  let dataBaseUrl = $state("");
+  let dataModel = $state("");
+  let dataKey = $state("");
+  let dataKeySaved = $state(false);
   let loaded = $state(false);
   let busy = $state(false);
   let feedback = $state("");
@@ -28,6 +33,9 @@
       model = cfg.model;
       keySaved = cfg.key_saved;
       corpusDir = cfg.corpus_dir;
+      dataBaseUrl = cfg.data_base_url;
+      dataModel = cfg.data_model;
+      dataKeySaved = cfg.data_key_saved;
     } catch (e) {
       notice(`读取 AI 配置失败：${e}`, true);
     }
@@ -38,10 +46,22 @@
     busy = true;
     try {
       const k = key.trim();
-      await aiSetConfig(baseUrl, model, k ? k : null);
+      const dk = dataKey.trim();
+      await aiSetConfig(
+        baseUrl,
+        model,
+        k ? k : null,
+        dataBaseUrl, // 空串=清除回落主 API（用户明确操作），始终提交
+        dataModel,
+        dk ? dk : null,
+      );
       key = "";
+      dataKey = "";
       const cfg = await aiGetConfig();
       keySaved = cfg.key_saved;
+      dataKeySaved = cfg.data_key_saved;
+      dataBaseUrl = cfg.data_base_url;
+      dataModel = cfg.data_model;
       notice("AI 配置已保存");
     } catch (e) {
       notice(`${e}`, true);
@@ -52,10 +72,23 @@
   async function clearKey() {
     busy = true;
     try {
-      await aiSetConfig(baseUrl, model, "");
+      await aiSetConfig(baseUrl, model, "", null, null, null);
       key = "";
       keySaved = false;
       notice("API Key 已从系统凭据管理器清除");
+    } catch (e) {
+      notice(`${e}`, true);
+    }
+    busy = false;
+  }
+
+  async function clearDataKey() {
+    busy = true;
+    try {
+      await aiSetConfig(baseUrl, model, null, null, null, "");
+      dataKey = "";
+      dataKeySaved = false;
+      notice("数据分析 API Key 已清除");
     } catch (e) {
       notice(`${e}`, true);
     }
@@ -100,6 +133,38 @@
       <span class="label">语料文件夹（对话检索范围——放 Markdown 即成语料；日记不参与）</span>
       <input type="text" value={corpusDir} disabled />
     </label>
+
+    <div class="sub-block">
+      <h3 class="sub-title">数据分析 API（可选 · 仪表盘「AI 数据分析」用）</h3>
+      <p class="sub-note">
+        建议单独再配一个 API，让数据分析对话与语料对话分开、各自提升 API 缓存命中率；
+        只有一个 API 时留空即可——自动与上方主 API 共用。
+      </p>
+      <label class="field">
+        <span class="label">数据分析 API Key（只存系统凭据管理器）</span>
+        <input
+          type="password"
+          bind:value={dataKey}
+          placeholder={dataKeySaved ? "已保存——输入新值可替换" : "留空 = 与上方主 API 共用"}
+          autocomplete="off"
+        />
+      </label>
+      {#if dataKeySaved}
+        <button class="btn-secondary clear-btn" onclick={() => void clearDataKey()} disabled={busy}>
+          清除数据分析 Key
+        </button>
+      {/if}
+
+      <label class="field">
+        <span class="label">数据分析接口地址（留空 = 共用上方接口地址）</span>
+        <input type="text" bind:value={dataBaseUrl} placeholder="留空与主 API 共用" />
+      </label>
+
+      <label class="field">
+        <span class="label">数据分析模型（留空 = 共用上方模型）</span>
+        <input type="text" bind:value={dataModel} placeholder="留空与主 API 共用" />
+      </label>
+    </div>
 
     <div class="actions">
       <button class="btn-primary" onclick={() => void save()} disabled={busy}>保存配置</button>
@@ -165,5 +230,26 @@
 
   .feedback.err {
     color: var(--color-danger, #dc2626);
+  }
+
+  .sub-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+  }
+
+  .sub-title {
+    font-size: var(--font-size-sm);
+    margin: 0;
+  }
+
+  .sub-note {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    margin: 0;
+    line-height: 1.6;
   }
 </style>

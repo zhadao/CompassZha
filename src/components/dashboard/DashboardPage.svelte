@@ -1,10 +1,15 @@
 <script lang="ts">
+  // 仪表盘（阶段 2 · 检查点 2.2，v4.1）：当日指标卡 + 趋势曲线 + 板块热力图。
+  // v4.15：顶端新增「AI 数据分析」入口——弹层对话窗（DataAiChat），AI 基于 9 项量化指标分析建议。
   import { app } from "../../stores/app.svelte";
   import { todayKey } from "../../lib/date";
   import { METRIC_LABELS, METRIC_UNITS } from "../../mock/preview";
   import StaticBadge from "../layout/StaticBadge.svelte";
   import TrendCharts from "./TrendCharts.svelte";
   import GoalHeatmaps from "./GoalHeatmaps.svelte";
+  import DataAiChat from "./DataAiChat.svelte";
+
+  let aiChatOpen = $state(false);
 
   const purpose =
     "干什么：展示当日 8 项关键指标、近 7/30/90 天趋势七折线（统一形式）、各人生板块投入热力图。数据源 = 每日日记 frontmatter 与清单（真实数据，录入即联动）。";
@@ -31,7 +36,12 @@
 </script>
 
 <div class="page">
-  <StaticBadge />
+  <div class="top-bar">
+    <StaticBadge />
+    <button class="btn-secondary ai-btn" onclick={() => (aiChatOpen = true)}>
+      📊 AI 数据分析
+    </button>
+  </div>
   <p class="purpose">{purpose}</p>
 
   <section class="card metrics-row">
@@ -49,9 +59,24 @@
   <GoalHeatmaps />
 </div>
 
+{#if aiChatOpen}
+  <DataAiChat onclose={() => (aiChatOpen = false)} />
+{/if}
+
 <style>
   .page {
     position: relative;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-1);
+  }
+
+  .ai-btn {
+    flex-shrink: 0;
   }
 
   .purpose {

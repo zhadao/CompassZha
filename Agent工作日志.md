@@ -20,6 +20,210 @@
 
 ---
 
+## 2026-10-17 01:05 | GLM-5.3 (Trae Agent) | 任务来源：用户「设置界面最下面的角落设置一个按钮『软件作者』，点开是弹窗：首行我的 github 库链接、次几行项目基于的几个项目的链接、简要介绍我的项目和其遵循 MIT 协议、小按钮『捐献作者』点击跳出二维码图片；决策部分选 CompassZha contributors；本机已装 GitHub CLI 可方便 release；做完改动后做一次全面的 github 仓库提交」（指定 github 插件 + git-commit Skill）
+
+**做了什么：**
+- **文档先行（v4.16）**：总需求文档表头升 v4.16、§2.8 设置页章节新增「软件作者」入口引用块（弹窗内容、`AuthorDialog.svelte`、`open_url_https` command、二维码资源与安全边界全部落档）
+- **前端**：新建 `src/components/settings/AuthorDialog.svelte`（弹窗：首行作者公开库链接 `https://github.com/zhadao/CompassZha` → 基于 6 项目链接 Tauri/Svelte/FullCalendar/Milkdown/ECharts+memos 风格参考 → 项目与 MIT 简介 →「捐献作者」展开收款二维码）；`SettingsPage.svelte` 底部右下角加「软件作者」按钮（低调样式，hover 提亮）；二维码图入 `src/assets/donate-qrcode.jpg`（396,982 bytes，两仓同步）
+- **后端**：`fs_cmds.rs` 新增 `open_url_https` command（`#[tauri::command(async)]`，仅接受 `https://` 前缀防任意协议注入，Windows `cmd /c start` + `CREATE_NO_WINDOW` 同 git() 防黑窗模式，macOS/Linux 分支 open/xdg-open）；`lib.rs` 注册；`tauri-fs.ts` 加 `openUrlHttps` 封装（浏览器预览模式退化 `window.open`，后端失败回落新标签页）
+- **发布物料**：LICENSE 署名 `zhadao` → `CompassZha contributors`（用户决策）；版本 0.2.0→0.2.1 全套（两仓 package.json / tauri.conf.json / Cargo.toml，Cargo.lock 构建时自动升 0.2.1 后同步公开仓）；CHANGELOG 新增 `[0.2.1] - 2026-10-17` 条目与底部链接表；README 新增「致谢 / Acknowledgements」小节（与弹窗内容对齐）
+- **验证与构建**：`npm run check` 0 错 0 警；`cargo check --offline` 通过；两仓 src（44 文件）+ src-tauri/src（7 文件）逐文件 MD5 完全一致；`npm run tauri -- build --no-bundle` 重建 → exe 20,696,576 bytes（MD5 `5E449B06F68C02576E325921AE87F482`），主工程与公开仓 release/ 哈希一致部署
+- **提交与推送**：敏感信息终检（全仓零 API key / 零邮箱 / 零本机路径；token 相关仅为 PAT 处理代码变量名）→ git-commit Skill 提交 `bf2b288`（14 files changed, +327/−6）→ push 成功（`origin/main == bf2b288`）→ annotated tag `v0.2.1` 推送成功（远端指向 bf2b288）
+
+**关键发现（实测确认）：**
+- **gh CLI 2.102.0 已装但未登录**：位于 `C:\Program Files\GitHub CLI\gh.exe`，当前 TRAE shell PATH 未含该目录（需运行时拼接）；`gh auth status` 报 "not logged into any GitHub hosts"——`gh auth login` 为交互式流程，Agent 无法非交互完成，故 **GitHub Release 页未创建**（tag 已在远端）
+- git 跟踪名显示为小写 `src-tauri/cargo.toml`（Windows 大小写不敏感，与 `Cargo.toml` 同一文件，无需处理）
+- exe 增大 19.35MB → 20.70MB：打包入二维码（388KB）+ LTO 布局差异，属正常波动（非 4.65MB 坏件特征）
+- 二维码为支付宝收款码（含"扎导"收款名），系用户主动要求公开发布的捐献物料，非隐私泄漏
+
+**留下的问题 / 下一步：**
+- **待用户执行一次 `gh auth login`**（交互式，仅需一次）：完成后即可 `gh release create v0.2.1 release\CompassZha.exe` 附 exe 建 Release 页；`v0.2.0` 当时无 gh 未建 Release，可一并补建（资产需重新构建或标注对应 commit）
+- 用户实机走查 v0.2.1「软件作者」弹窗（按钮位置/弹窗内容/二维码展开/外链点击）——走查通过即门禁确认
+- 挂起项：阶段五剩余（Windows 安装包、本地快照与冲突处理）
+
+**涉及文件：**
+- 主工程（`d:\Coding\CompassZha\工程\主工程compass`）：`package.json`、`src-tauri\{Cargo.toml,Cargo.lock,tauri.conf.json,src\fs_cmds.rs,src\lib.rs}`、`src\assets\donate-qrcode.jpg`、`src\components\settings\{AuthorDialog.svelte,SettingsPage.svelte}`、`src\lib\tauri-fs.ts`、`release\CompassZha.exe`
+- 公开仓（`d:\Coding\CompassZha\开源发布\Compass-public`）：同上全部 + `LICENSE`、`README.md`、`CHANGELOG.md`
+- `CompassZha-总需求文档-v4.0.md`（v4.16）、本日志（副本同步 `工程\主工程compass\Agent工作日志.md`）
+
+---
+
+## 2026-10-16 22:32 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「现在所有的功能都实现的很好了，可以在github公开库里publish了，但注意发布和提交的过程中，不应该涉及我任何的apikey，github账户等等个人信息，发布的版本应该是一个纯净的，没有任何日记，没有任何人生板块，等待用户上手操作的版本」（指定 github 插件 + git-commit Skill）
+
+**做了什么：**
+- **发布前修复阻塞缺陷**：`config_topics.rs` 的 `config_set_topics` 改为 `mut topics` 并新增 helper `normalize_keywords`（落盘侧把 keywords 统一规范化为字符串数组）；主工程与公开仓同步，`cargo check` 干净
+- **文档脱敏与对齐**：README / docs(ARCHITECTURE·DATA-FORMAT·ROADMAP) / CHANGELOG / .gitignore 中开发者本机路径 `D:\Coding\CompassZha` 全部改为 `%USERPROFILE%\CompassZha`；README 界面分区改「七个」并补「语料对话」「仪表盘 AI 数据分析」两节；ROADMAP 阶段 4→已完成、阶段 5→进行中；CHANGELOG 新增 `[0.2.0] - 2026-10-16`
+- **版本统一 0.2.0**：两仓 `package.json` / `tauri.conf.json` / `Cargo.toml` 由 0.1.0 提升；并用主工程 `Cargo.lock` 覆盖公开仓滞后 lock（原仍记 0.1.0 且缺 keyring 相关解析项）；两仓 `fs_cmds.rs` 默认 8 张索引卡补 `keywords`
+- **重建并部署可执行文件**：`npm run tauri -- build --no-bundle` 1m42s → 部署公开仓 `release/CompassZha.exe`，19,353,600 bytes，MD5 `DA275EFFC97BC8C1001ECB4113CD40E5`，源/目标哈希一致
+- **终检 → 提交 → 推送**：全仓 grep 无 API Key / 邮箱 / 本机路径，`git ls-files` 无日记 / life 板块内容 / corpus / config.json / 日志；git-commit Skill 提交 `1807f58`（44 files changed, +4160/−187）→ `git push origin main` 成功（`origin/main == 1807f58`）；另建并推送 annotated tag `v0.2.0`
+
+**关键发现（实测确认）：**
+- 两仓 `src/` 与 `src-tauri/src/` 逐文件 MD5 **完全一致**，「仅单边存在 / 内容差异」均为空
+- **真实缺陷**：`TopicCardsEditor.svelte` 把 keywords 当「逗号分隔文本」用字符串绑定（`keywords: ""` + `bind:value`），而检索侧 `ai_chat::merge_card_keywords` 要求**数组** → 用户在 GUI 保存任一张卡后，该卡关键词即被降级为字符串、检索静默失效。已在落盘侧规范化修复
+- 公开仓 `Cargo.lock` 比主工程滞后（缺 `keyring`/`chacha20`/`cfg_aliases` 等解析项，`compass` 版本仍 0.1.0）→ 以主工程 lock 覆盖后两仓一致
+- `zhadao` 仅出现在仓库 URL、LICENSE 版权署名与 CHANGELOG 版本链接（公开身份，非敏感）；**全仓无任何邮箱地址**
+- 推送未遇代理问题：本次 `git push` 直连成功（`https.proxy` 为死端口一事未触发）
+
+**留下的问题 / 下一步：**
+- **待用户决策（未擅自改动）**：① `LICENSE` 版权署名 `Copyright (c) 2026 zhadao` 是否要中性化；② 历史提交中的提交者邮箱 `ZhaDaoLee@outlook.com` 是否改写（需 force push，属破坏性操作，未执行）
+- **GitHub Release 未创建**：本机未安装 `gh` CLI；分支与 `v0.2.0` tag 已推送到远端，Release 页 + 二进制附件建议由用户在 GitHub 网页手动创建
+- 挂起项：阶段五剩余（Windows 安装包、本地快照与冲突处理）
+
+**涉及文件：**
+- 公开仓（`d:\Coding\CompassZha\开源发布\Compass-public`）：`README.md`、`CHANGELOG.md`、`docs\{ARCHITECTURE,DATA-FORMAT,ROADMAP}.md`、`.gitignore`、`package.json`、`release\CompassZha.exe`、`src-tauri\{Cargo.toml,Cargo.lock,tauri.conf.json,src\fs_cmds.rs,src\config_topics.rs}`
+- 主工程（`d:\Coding\CompassZha\工程\主工程compass`）：`package.json`、`src-tauri\{Cargo.toml,tauri.conf.json,src\fs_cmds.rs,src\config_topics.rs}`
+- 本日志（副本同步 `工程\主工程compass\Agent工作日志.md`）
+
+---
+
+## 2026-10-16 21:50 | GLM-5.3 (Trae Agent) | 任务来源：用户批准「仪表盘AI数据分析功能方案」执行（含追加需求：设置页支持第二个 API，提升缓存命中率）
+
+**做了什么：**
+- **文档先行（v4.15）**：总需求 §2.4 加「AI 数据分析」行（仪表盘顶端入口、弹层对话窗、非数据问题只回固定句）；§2.7 加「数据分析工作区」「双 API 配置」两行（建议单独配 API 提升缓存命中率，不填回落共用主 API）；§4.4 检查点 4.5 标注门禁通过（含 v4.13/4.14 修正）、新增 4.6 数据分析走查项
+- **双 API（用户追加）**：config.json `ai` 扩展 `data_base_url/data_model`（空=回落主配置）；keyring 新 account `deepseek_api_key_data`（三态语义同主 key）；`ai_get_config` 的 data_* 返回**原始配置值**（若返回解析后有效值，未配置时保存会把回落值固化污染语义——设计时自察纠正）；设置页 AiConfigSection 新增虚线子区块「数据分析 API（可选）」含专用 key/base_url/model 输入与清除按钮
+- **数据分析链路**：新命令 `data_analyze_ask(messages, data_text)` 单次 API 调用（每次提问 1 次，比语料对话 2 次省）——system 含固定限制句「该工作区只能回答数据相关的问题。」+ 前端组装的每日量化数据表；新弹层组件 DataAiChat.svelte（数据从 store 出发：有任一指标非空的天，按日期升序 10 列竖线分隔，每次发送现取=最新录入即刻可析）；DashboardPage 顶端 top-bar 加「📊 AI 数据分析」按钮挂载弹层
+- **验证交付**：cargo check 干净 / svelte-check 0 错 0 警 / `tauri build --no-bundle` 1m40s；部署哈希 `CF2CC9C1081298C7`，19,345,920 bytes（正常区间），源/目标哈希一致
+
+**关键发现（实测确认）：**
+- 主工程目录已从「前版本」更名为「工程」（`d:\Coding\CompassZha\工程\主工程compass`）——本条及后续所有路径以新名为准；早前后台任务残留的旧路径构建日志（前版本\...）为历史产物
+- `npm run tauri` 脚本本体是不带子命令的 `tauri`，必须 `npm run tauri -- build --no-bundle`（直接 `npm run tauri` 只会打印 CLI help 退出码 2）
+
+**留下的问题 / 下一步：**
+- 用户实机走查检查点 4.6：①仪表盘顶端按钮弹窗；②问「最近哪几天睡得比较晚？」应引具体日期；③问非数据（如写诗）只回固定句；④录入新数据后提问含最新值；⑤设置页单独配 data key 生效、不配回落主 API
+- 源码仓未提交改动已累积 v4.13/v4.14/v4.15 三轮，建议走查通过后统一提交
+- 挂起项：开源发布（用户明确推迟）、5.3 本地快照、5.5 安装包
+
+**涉及文件：**
+- 后端：`src-tauri\src\ai_chat.rs`（双 API 配置 + data_analyze_ask）、`src-tauri\src\lib.rs`（注册命令）
+- 前端：`src\lib\ai.ts`、`src\components\settings\AiConfigSection.svelte`、`src\components\dashboard\DataAiChat.svelte`（新建）、`src\components\dashboard\DashboardPage.svelte`
+- 文档：`CompassZha-总需求文档-v4.0.md`、`.trae\documents\仪表盘AI数据分析功能方案.md`（已批准）
+- 部署：`工程\主工程compass\release\CompassZha.exe`
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
+## 2026-10-16 21:18 | GLM-5.3 (Trae Agent) | 任务来源：用户走查确认对话正常后整改 corpus 组织（方案已批准：语料库整理与索引卡检索优化 v4.14）
+
+**做了什么：**
+- **磁盘一次性整理**：立正完整 git 仓（115MB 含 .git/脚手架）`corpus\lizheng-open-context` → 移出检索目录至数据根 `语料源\`（保留 git pull 更新能力）；其 `corpus/` 子目录 1233 个正文 md 复制至 `corpus\lizheng\`（保留 videos/帖子等 10 个载体子目录）；删 8 个空主题文件夹（旧版"卡=文件夹"残留，逐一验空后删，新代码不再创建）；数据仓 .gitignore `corpus/lizheng-open-context/` 行替换为 `语料源/` + `corpus/lizheng/`；config.json 8 张卡补 keywords（每卡 6-8 个检索词）
+- **索引卡从装饰变真功能**：ai_chat.rs 新增 `merge_card_keywords`——AI 扩词选卡后，选中卡的 keywords 并入检索词参与本地打分（此前实测卡片对检索完全不起作用，topic 路径加权是旧物理结构的残留逻辑）
+- **ChatHelp 文案**：喂语料改为「直接丢 corpus\ 根目录，不分类、交叉主题只放一份，主题筛选由 AI 用索引卡做」；索引卡明确「不是文件夹，是 AI 检索筛选标签，编辑关键词 = 调整检索路由」；补立正语料更新方法（git pull + 复制覆盖）
+- **文档**：总需求文档 §2.7 统一大库行重写（v4.14 扁平大库）、索引卡 GUI 行补 keywords 语义、§3.1 数据结构图同步
+- **验证交付**：cargo check 干净 / svelte-check 0 错 0 警 / tauri build 1m33s（MSI 步 WiX 下载超时同上次，不影响 exe）；部署哈希 `7DE8E4005202E639`，18,320,896 bytes（正常区间）
+
+**关键发现（实测确认）：**
+- PowerShell `Copy-Item 源\* 目标\ -Recurse` 陷阱：目标目录不存在时会把源的**第一个子项**重命名成目标名（本次 blog-posts 被误当 lizheng，后续子项报"Container cannot be copied onto existing leaf item"）——**必须先 New-Item 目标目录再复制**
+- corpus 现状实测：`corpus\` 一级 = 仅 `lizheng\`（1233 md）；8 空文件夹删除时逐一验空零误伤
+
+**留下的问题 / 下一步：**
+- 用户实机走查 v4.14：①「资源跳转」打开 corpus 应只见 `lizheng\` 一级目录，根可直接丢 md；②问「立正怎么看职业选择」仍带真实出处；③问交叉主题（如「工作压力大影响健康」）应命中跨主题正文——验证「语料不用复制两份」；④索引卡 GUI 应能看到 keywords 已填、可编辑
+- 后续用户问立正语料更新时：git pull `语料源\lizheng-open-context` → 复制其 corpus 子目录覆盖 `corpus\lizheng\`（说明弹层已写此方法）
+- tauri build 的 MSI 打包步稳定超时（WiX 下载），如需 MSI 安装包要解决网络问题，exe 不受影响
+
+**涉及文件：**
+- 磁盘：`corpus\`（整理）、`语料源\`（新建）、`.gitignore`、`config.json`（8 卡 keywords）
+- 后端：`src-tauri\src\ai_chat.rs`（merge_card_keywords）
+- 前端：`src\components\chat\ChatHelp.svelte`（文案）
+- 文档：`CompassZha-总需求文档-v4.0.md`（§2.7/§3.1）、`.trae\documents\语料库整理与索引卡检索优化方案.md`（已批准）
+- 部署：`工程\主工程compass\release\CompassZha.exe`
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
+## 2026-10-16 20:59 | Kimi-K2.8-Preview (Trae Agent) | 任务来源：用户启动新版报「localhost 拒绝连接 ERR_CONNECTION_REFUSED」（修正上一条记录的错误结论）
+
+**做了什么：**
+- **根因确认（实测）**：上一条记录部署的 4.65MB exe 是**裸 `cargo build --release` 产物**——未走 tauri CLI，缺少 custom-protocol 构建标记，窗口按 dev 行为去连 Vite dev 服务器 `http://localhost:1420`（无头环境无此服务）→ 白屏报错。前 agent 的"二进制内容核验"只能证明文件来自新源码，**验证不了运行行为**，错误结论已修正
+- **修复**：改用 `npm run tauri build` 标准构建（先 vite build 11.28s + cargo 1m33s；MSI 打包步因需下载 WiX 超时报错，**不影响 exe 产物**）；新 exe 17,316,352 bytes（与历史正常版 17,312,768 一致），哈希 `BEBB6603EBD84913`
+- 重新部署 `release\CompassZha.exe`，源/目标哈希一致
+
+**关键发现（实测确认）：**
+- 构建方式红线：**部署用 exe 必须 `npm run tauri build` 构建**（或 `tauri build --no-bundle`），裸 `cargo build --release` 产物在 Windows 上不可用（连 localhost:1420）；产物体积是可靠信号——≈17MB 正常，明显偏小必有问题
+- MSI 打包失败（WiX 下载超时）不影响 release exe 的使用，已部署的 exe 完整可用
+
+**留下的问题 / 下一步：**
+- 用户重新启动 `release\CompassZha.exe`，复测三问：①「立正怎么看职业选择」带真实 `[来源: 文件名]`；②「怎么选择自己的职业」同上；③「量子力学」仅一句固定提示后直答
+- 后续 release 部署前检查清单加一项：体积 ≈17MB + 哈希记录
+
+**涉及文件：**
+- `工程\主工程compass\release\CompassZha.exe`（重新部署为 tauri build 产物）
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
+## 2026-10-16 20:56 | Kimi-K2.8-Preview (Trae Agent) | 任务来源：用户走查复测「职业选择」两问均输出元信息免责声明，要求反思并改进（方案已批准）
+
+**做了什么：**
+- **检索去污染**：`corpus_search.rs` 新增目录级排除（`.` 开头 + index/docs/scripts/tests/evals/examples/catalog/config/licenses/assets/images/media/context 等 19 个脚手架目录名）与文件级排除（readme/index/changelog/license/contributing/agents 等 20 个 stem + `license-` 前缀），加 `MIN_SCORE=2` 噪声段落门槛；接口与 CorpusHit 结构不变
+- **提示词纪律**：`ai_chat.rs` system 提示词合并为一份统一口径——无关材料直接忽略且不得描述语料库本身、支撑不足时固定一句「以下回答未得到语料库的充分支撑，属 AI 自身观点。」开头后直答、严禁输出库结构/检索建议/许可归属等元信息
+- **引用对齐**：生成后 citations 只保留 answer 中实际引用到的条目（title 被包含），一条未引到时回退前 3 条；前端零改动
+- **文档对齐**：总需求文档 §2.7 AI 对话行改写兜底语义 + 新增「检索范围清洗（v4.13）」行
+- **验证交付**：cargo check 干净；release 构建 1m42s；部署 `release\CompassZha.exe`（哈希 `18DAA5080BB2F629`，4,651,008 bytes——体积较上版 17MB 明显缩小，已做二进制内容核验：新标记 `code_of_conduct` 存在、旧提示词字符串无残留，确认为正确新版）
+
+**关键发现（实测确认）：**
+- 污染源头逐目录核查：lizheng 仓 1270 个 md 中 37 个是脚手架元文件（仓库根 8 个 + index/ 10 个标题清单——videos.md 156KB、community-posts.md 152KB，整篇标题表格任何职业关键词都密集命中），用户两次提问的引用出处与元文件清单一一对应；正文 1233 个 md 全部在其 `corpus/` 子目录，目录级排除不误伤
+- 两次免责声明不一致的根因：两次检索命中的元文件集合不同，模型顺着材料自由发挥——纯提示词缺陷，非需求理解偏差
+
+**留下的问题 / 下一步：**
+- 用户实机复测：「立正怎么看职业选择」「怎么选择自己的职业」应命中 videos/course-lessons 等正文并带真实 `[来源: 文件名]`；无语料问题（如「量子力学」）应仅一句固定提示后直答；「引用出处」列表应与回答实际标注一致
+- 若复测仍有弱相关材料干扰回答，候选下一步：命中分数阈值上调 / 材料段上限 12→8
+
+**涉及文件：**
+- 后端：`src-tauri/src/corpus_search.rs`、`ai_chat.rs`
+- 文档：`CompassZha-总需求文档-v4.0.md`（§2.7）、`.trae/documents/阶段4-语料对话回答质量改进方案.md`（已批准方案）
+- 部署：`工程\主工程compass\release\CompassZha.exe`
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
+## 2026-10-16 20:38 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「把新版本覆盖上去吧，我现在关掉了」
+
+**做了什么：**
+- 确认占用解除：`Get-Process CompassZha` 无输出（此前 PID 39152 已退出）
+- 完成阶段 4 最后半步部署：`Copy-Item src-tauri\target\release\compass.exe release\CompassZha.exe -Force`
+- 部署校验：源/目标 SHA256 前 16 位一致 `1886A8AFEB6E9655`，大小 17,312,768 bytes，mtime 20:31:34
+
+**关键发现（实测确认）：**
+- 上一条记录所述「部署被挡」阻塞已解除；release 目录现为 v4.12 阶段 4（语料对话）版本，可交付走查
+
+**留下的问题 / 下一步：**
+- 用户走查清单（检查点 4.2/4.4/4.5）：①未配 key → 对话分区出现引导卡；②设置页「AI 配置」填 DeepSeek key 保存（密钥入 Windows 凭据管理器）；③问立正语料必有问题（如「立正怎么看职业选择」）验证回答带 `[来源: 文件名]` 出处；④问语料没有的问题（如「量子力学」）验证开头提示「未得到语料库的充分支撑」；⑤顶部「资源跳转 / 索引卡 / 说明」三按钮正常
+- 挂起旧走查项：v4.9（板块改名/删除）、v4.10（GitHub 同步）、v4.11（设置说明）
+- 走查通过前不启动阶段 5 或任何新功能
+
+**涉及文件：**
+- `工程\主工程compass\release\CompassZha.exe`（覆盖为新版）
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
+## 2026-10-16 20:31 | GLM-5.3 (Trae Agent) | 任务来源：用户批准《阶段4-语料对话实施方案.md》（v2 修订版：语料范围澄清 / 可优化路线 / 资源跳转按钮）
+
+**做了什么：**
+- **源码仓保护（第 0 步）**：`工程\主工程compass` git init + 基线提交 `ef4c52c`（111 文件）——开发主线首次有版本控制；阶段 4 全部改动已提交 `166d2af`（15 文件，+1839 行）
+- **Rust 后端**：新建 `corpus_search.rs`（L1 关键词打分：walk corpus/ 全部 .md、空行分段、截 500 字、top-12、文件级×2 加成但**不做文件级过滤**——正文命中而文件名不命中同样检出，初版粗筛设计缺陷当场纠正）；`ai_chat.rs`（AI 配置 keyring 三态 + `ai_ask` 三步：扩词→检索→生成 + 兜底指令「未得到语料库充分支撑」+ `open_corpus_folder` 资源跳转 + 错误信息过滤 key）；`config_topics.rs`（索引卡整组读写，id/name 必填校验）；Cargo.toml +reqwest 0.12（blocking/rustls）；lib.rs 注册 7 命令
+- **前端**：`src/lib/ai.ts` 接缝层；`ChatPage.svelte`（消息流/思考中/引用出处折叠列表/资源跳转/索引卡/说明三按钮/未配 key 引导卡）；`ChatHelp.svelte` 三节说明（喂语料方法/填 API 步骤/隐私/检索范围注明仅 corpus 且日记不参与/兜底提示语义）；`TopicCardsEditor.svelte`（8 卡编辑含「不建议频繁更改」警示）；`AiConfigSection.svelte`（设置页 AI 配置区，key password 不回显可清除）；Sidebar「语料对话」入口点亮（移除 v2 占位与残留样式）；App.svelte/ schema.ts 接路由
+- **验证**：`cargo check` 干净（2 处 serde_json 引用传参小错即修）；`npm run check` **0 错 0 警**（16 处 $state 警告清零——runes 组件内裸 let 不响应式，ChatPage/TopicCardsEditor/AiConfigSection 全部改 $state；Sidebar 删未用 .v2-tag/.nav-item.disabled 样式）；release 构建成功（3m02s）
+
+**关键发现（实测确认）：**
+- **1200 万字语料来源澄清（用户核心疑问）**：全部来自 `corpus/lizheng-open-context/`（此前 clone 的立正开源库），用户未塞任何语料；比立正官网「798 万字」多是因官网数为筛选后用量、开源库含全部原始文本、且字节粗算虚高
+- **Svelte 5 runes 模式切换陷阱**：组件一旦使用 `$props/$effect`，裸 `let` 即失响应式——新组件全部 `$state()` 声明；同项目 legacy 组件（如 SettingsPage）用 let 无警告，混用两种风格时以「是否含 runes API」为准
+- 立正库结构实测：1270 个 md / 37.8MB 纯文本 / 非文本资产 77.5MB（检索跳过）；`context/` 8 个判断卡 + `index/` 10 个索引文件可天然复用
+
+**留下的问题 / 下一步：**
+- **部署被挡（实测确认）**：新版 exe 已构建，但用户应用正在运行（PID 39152）占用 `release\CompassZha.exe`，复制失败——待用户关闭应用后部署（哈希：新构建 `1886A8AF…` vs 旧部署 `B22D0BE0…`）
+- 用户走查清单（检查点 4.2/4.4/4.5）：未配 key 引导 → 设置页填 DeepSeek key → 问立正语料必有问题验证带出处 → 问语料没有的问题验证兜底提示 → 资源跳转/说明/索引卡三按钮
+- 每次提问 = 2 次 API 调用（扩词+生成），费用用户自担；检索无历史持久化（会话内多轮）
+- v4.9~v4.11 走查项仍挂起（板块改名/删除、GitHub 同步、设置说明）
+
+**涉及文件：**
+- 后端：`src-tauri/src/corpus_search.rs`、`ai_chat.rs`、`config_topics.rs`（均新增）、`lib.rs`、`Cargo.toml`
+- 前端：`src/lib/ai.ts`（新增）、`src/components/chat/ChatPage.svelte`、`ChatHelp.svelte`、`TopicCardsEditor.svelte`（均新增）、`src/components/settings/AiConfigSection.svelte`（新增）、`SettingsPage.svelte`、`layout/Sidebar.svelte`、`App.svelte`、`types/schema.ts`
+- 源码仓：`工程\主工程compass\.git`（init，2 提交）
+- 本日志（副本同步 `工程\主工程compass\`）
+
+---
+
 ## 2026-10-16 20:10 | GLM-5.3 (Trae Agent) | 任务来源：用户「先用 SoloMD 看看能不能实现我的需求」+ 三项对话层 UI 需求（语料引用逻辑 / 索引卡 GUI / 对话说明按钮）
 
 **做了什么：**

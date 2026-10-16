@@ -10,6 +10,67 @@ use std::path::{Path, PathBuf};
 
 use crate::fs_cmds;
 
+/// 最低保留分：仅命中 1 次且无文件加成的段落几乎必是噪声（标题表格行、片语提及），丢弃；
+/// 清洗后为空时由调用方走「无材料」兜底分支。
+const MIN_SCORE: u32 = 2;
+
+/// 目录级排除（小写集合）：开源语料仓自带的脚手架目录，里面没有正文。
+/// 实测背景：lizheng-open-context 仓 1270 个 md 中 37 个是这类元文件
+/// （index/ 标题清单、docs/、context/ 判断卡等），曾把真实正文挤出 top-12。
+fn is_meta_dir(name: &str) -> bool {
+    name.starts_with('.')
+        || matches!(
+            name.to_lowercase().as_str(),
+            "index"
+                | "docs"
+                | "doc"
+                | "scripts"
+                | "tests"
+                | "test"
+                | "evals"
+                | "eval"
+                | "examples"
+                | "demo"
+                | "catalog"
+                | "config"
+                | "licenses"
+                | "license"
+                | "assets"
+                | "images"
+                | "media"
+                | "context"
+                | "benchmarks"
+        )
+}
+
+/// 文件级排除（兜底，防止正文目录混入同名文件）：stem 小写命中即跳过。
+fn is_meta_file(stem: &str) -> bool {
+    let s = stem.to_lowercase();
+    s.starts_with("license-")
+        || matches!(
+            s.as_str(),
+            "readme"
+                | "index"
+                | "changelog"
+                | "changes"
+                | "news"
+                | "license"
+                | "licence"
+                | "copying"
+                | "contributing"
+                | "contributors"
+                | "code_of_conduct"
+                | "security"
+                | "governance"
+                | "agents"
+                | "maintainers"
+                | "authors"
+                | "reuse"
+                | "manifest"
+                | "notice"
+        )
+}
+
 /// 单段命中（corpus_search 返回；带出处供 AI 标注引用）。
 #[derive(Serialize, Clone)]
 pub struct CorpusHit {
@@ -41,7 +102,7 @@ pub fn corpus_search(
     let mut hits = Vec::new();
     let mut files = 0u32;
 
-    // 迭代 walk（跳过第三方语料仓自带的 .git；语料库可能含图片等资产，只取 .md）
+    // 迭代 walk（跳过语料仓脚手架目录与元文件；只取 .md）
     let mut stack: Vec<PathBuf> = vec![root.clone()];
     while let Some(dir) = stack.pop() {
         let entries = match std::fs::read_dir(&dir) {
@@ -51,17 +112,21 @@ pub fn corpus_search(
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
-                if p.file_name().map(|n| n == ".git").unwrap_or(false) {
+                if p.file_name().map(|n| is_meta_dir(&n.to_string_lossy())).unwrap_or(false) {
                     continue;
                 }
                 stack.push(p);
             } else if p.extension().map(|e| e == "md").unwrap_or(false) {
+                if p.file_stem().map(|s| is_meta_file(&s.to_string_lossy())).unwrap_or(false) {
+                    continue;
+                }
                 files += 1;
                 score_file(&p, &root, &keywords, topic_ids.as_deref(), &mut hits);
             }
         }
     }
 
+    hits.retain(|h| h.score >= MIN_SCORE);
     hits.sort_by(|a, b| b.score.cmp(&a.score));
     hits.truncate(limit);
     eprintln!(
