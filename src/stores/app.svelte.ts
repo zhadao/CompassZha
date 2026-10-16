@@ -1,9 +1,9 @@
 /**
- * 全局 store（Svelte 5 runes）。「换数据源不换组件」的唯一接缝：
- * 数据源 = Tauri fs + Markdown 文件（daily/yyyy/yyyy-mm-dd.md 与 life/<板块>/），
+ * 全局 store（Svelte 5 runes）。「换数据源不换组件」的唯一接缝（SPEC-011）已兑现：
+ * 阶段 1 起数据源 = Tauri fs + Markdown 文件（daily/yyyy/yyyy-mm-dd.md 与 life/<板块>/），
  * 组件层对此无感知，仍然只调用本 store 的方法。
  *
- * 写路径：每个 UI 操作标记 dirty 章节 → 500ms 防抖 →
+ * 写路径（检查点 1.4/1.5/1.6）：每个 UI 操作标记 dirty 章节 → 500ms debounce →
  * 章节级手术写回（lib/markdown.ts，未修改章节字节级保留）→ 本地 git 自动提交。
  * 浏览器环境（无 Tauri 运行时，persist=false）退化为纯内存态，便于 vite 预览。
  */
@@ -24,6 +24,7 @@ import { genId } from "../mock/preview";
 import { addHours, offsetDays, todayKey } from "../lib/date";
 import {
   type ParsedDaily,
+  type GoalStats,
   parseDaily,
   buildDailyFile,
   writeMetrics,
@@ -33,6 +34,11 @@ import {
   writeFocusLog,
   writeSchedules,
   schedulesToEvents,
+  hasGoalTag,
+  stripGoalTag,
+  renameGoalTag,
+  parseGoalStats,
+  buildGoalStats,
 } from "../lib/markdown";
 import {
   persist,
@@ -75,20 +81,24 @@ class AppState {
   section = $state<SectionId>("today");
   sidebarCollapsed = $state(false);
   detailHidden = $state(false);
-  /** 窗口宽度（响应式三档：≥1280 / 800–1280 / <800） */
+  /** 窗口宽度（响应式三档：≥1280 / 800–1280 / <800，总需求 §2.9） */
   winWidth = $state(typeof window !== "undefined" ? window.innerWidth : 1280);
   /** 右栏当前是否可见（1280 档手动开关 + 自动画出） */
   detailVisible = $state(true);
   /** 当前编辑日（文件树 / 今日入口联动） */
   selectedDate = $state(todayKey());
 
-  /* ---- 数据（启动 loadAll 从真实文件载入；浏览器预览为空态） ---- */
+  /* ---- 数据（阶段 1：启动 loadAll 从真实文件载入；浏览器预览为空态） ---- */
   dailyNotes = $state<Record<string, DailyNote>>({});
   /** 日历事件（v4.4 已接真：写回当日 ## 日程 章节） */
   events = $state<EventItem[]>([]);
 
   /* ---- 人生板块（板块 = life/ 下子文件夹；v4.5：文件夹内含多 Markdown 文件） ---- */
   lifeBoards = $state<LifeBoard[]>([]);
+  /** 板块投入历史存档（v4.9：life/goal-stats.md；仅改过名/删过的板块有记录） */
+  goalStats = $state<GoalStats>({});
+  /** 板块删除后的提示横幅（v4.9：告知历史数据保留位置；null = 不显示） */
+  boardNotice = $state<string | null>(null);
   /** 当前打开（文件夹视图）的板块 id；null = 网格 / 空态 */
   openedLifeBoardId = $state<string | null>(null);
   /** 文件夹视图内当前打开的文件 id（右侧编辑器显示对象）；null = 未选 */
@@ -146,9 +156,9 @@ class AppState {
 
   /**
    * 扫描真实文件装载内存态：
-   * 1) 确保当天文件存在：缺失则按模板创建（不覆盖已有）；
+   * 1) ensureToday：今天文件缺失则按 §3.2 模板创建（不覆盖已有）；
    * 2) daily/：全量扫描各年份目录（保证旧文件在编辑时不会因未装载而丢内容；
-   *    近 90 天窗口只影响仪表盘默认展示）；
+   *    近 90 天窗口只影响仪表盘默认展示，阶段 3 SQLite 索引接手查询）；
    * 3) life/：一级子文件夹 = 板块，默认文档 frontmatter 的 icon 为图标。
    */
   async loadAll(): Promise<void> {
@@ -212,6 +222,9 @@ class AppState {
         boards.push({ id: genId("life"), name: d.name, icon, files });
       }
       this.lifeBoards = boards;
+      // v4.9：板块投入历史存档（文件缺失 = 尚无板块改名/删除过，空表起步）
+      const statsText = await fsRead("life/goal-stats.md").catch(() => null);
+      this.goalStats = statsText ? parseGoalStats(statsText) : {};
       this.loaded = true;
     } catch (err) {
       console.error("[loadAll] 数据装载失败", err);
@@ -367,6 +380,16 @@ class AppState {
     });
     this.markDirty(date, "tasks");
     this.markDirty(tomorrow, "tasks");
+  }
+
+  /** 任务右键关联/取消关联板块（v4.9 GUI）：勾选 = 追加 `#goal/<板块名>`，取消 = 移除标签 */
+  toggleTaskGoal(date: string, taskId: string, boardName: string, linked: boolean): void {
+    const t = this.getNote(date).tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    const has = hasGoalTag(t.text, boardName);
+    if (has === linked) return; // 无变化（并发点击防重复追加）
+    t.text = linked ? `${t.text} #goal/${boardName}`.trim() : stripGoalTag(t.text, boardName);
+    this.markDirty(date, "tasks");
   }
 
   /** 临时记录 / 今日收尾 */
@@ -549,6 +572,101 @@ class AppState {
     this.openedBoardFileId = null;
   }
 
+  /** 板块重命名（v4.9 修订）：文件夹 + 默认文档改名；任务词条同步更名；热力图历史转记新名 */
+  renameBoard(boardId: string, newName: string): void {
+    const b = this.lifeBoards.find((x) => x.id === boardId);
+    const raw = newName.trim();
+    if (!b || !raw || raw === b.name) return;
+    if (this.lifeBoards.some((x) => x.name === raw)) return; // 与现存板块重名拒绝
+    const old = b.name;
+    // 1) 热力图历史转记新名（过去某天：存档 ?? 实时 → 固化进存档）
+    this.archiveBoardStats(old, raw);
+    // 2) 内存改名：板块名 + 默认文档名 + 待写回 rel 路径
+    b.name = raw;
+    const def = b.files.find((f) => f.name === `${old}.md`);
+    if (def) def.name = `${raw}.md`;
+    b.files.sort((a, x) => a.name.localeCompare(x.name, "zh"));
+    for (const rel of [...this.dirtyBoards]) {
+      const parts = rel.split("/");
+      if (parts.length !== 3 || parts[1] !== old) continue;
+      const file = parts[2] === `${old}.md` ? `${raw}.md` : parts[2];
+      this.dirtyBoards.delete(rel);
+      this.dirtyBoards.add(`life/${raw}/${file}`);
+    }
+    // 3) 全部日记任务词条同步更名（v4.9 修订：关联保留；历史统计已由 1) 固化双保险）
+    this.renameGoalTagsEverywhere(old, raw);
+    if (persist) {
+      void (async () => {
+        try {
+          await fsRename(`life/${old}`, `life/${raw}`);
+          if (def) await fsRename(`life/${raw}/${old}.md`, `life/${raw}/${raw}.md`).catch(() => {});
+          await this.saveGoalStats();
+          await gitAutoCommit(`板块改名：${old} → ${raw}（任务标签已同步更名，热力图历史保留） · ${nowHHmm()}`);
+        } catch (err) {
+          console.error("[renameBoard] 落盘失败", err);
+        }
+      })();
+    }
+  }
+
+  /* ---- 板块投入历史（v4.9 热力图「存档 ?? 实时」，§2.4） ---- */
+
+  /** 热力图取数：过去某天读存档优先（无存档则实时聚合），今天永远实时 */
+  boardCountOn(boardName: string, date: string): number {
+    if (date < todayKey()) {
+      const archived = this.goalStats[boardName]?.[date];
+      if (archived !== undefined) return archived;
+    }
+    const note = this.dailyNotes[date];
+    if (!note) return 0;
+    return note.tasks.filter((t) => hasGoalTag(t.text, boardName)).length;
+  }
+
+  /** 固化某板块历史到存档（改名转记 targetName / 删除+保留原地留存）：过去某天 = 存档 ?? 实时，0 不记 */
+  private archiveBoardStats(name: string, targetName: string): void {
+    const today = todayKey();
+    const rec: Record<string, number> = { ...(this.goalStats[targetName] ?? {}) };
+    const archived = this.goalStats[name] ?? {};
+    for (const [date, count] of Object.entries(archived)) {
+      if (count > 0) rec[date] ??= count;
+    }
+    for (const [date, note] of Object.entries(this.dailyNotes)) {
+      if (date >= today) continue; // 今天保持实时，不固化
+      const live = note.tasks.filter((t) => hasGoalTag(t.text, name)).length;
+      const v = archived[date] ?? live;
+      if (v > 0) rec[date] = v;
+    }
+    this.goalStats[targetName] = rec;
+    if (targetName !== name) delete this.goalStats[name];
+  }
+
+  /** 全部日记任务词条移除某板块标签（删除+不保留用；内存改 + dirty 落盘） */
+  private stripGoalTagsEverywhere(boardName: string): void {
+    for (const [date, note] of Object.entries(this.dailyNotes)) {
+      if (!note.tasks.some((t) => hasGoalTag(t.text, boardName))) continue;
+      note.tasks = note.tasks.map((t) => ({ ...t, text: stripGoalTag(t.text, boardName) }));
+      this.markDirty(date, "tasks");
+    }
+  }
+
+  /** 全部日记任务词条同步改板块标签名（v4.9 修订：改名保留关联；任务已含新名标签时仅移除旧标签防重复） */
+  private renameGoalTagsEverywhere(from: string, to: string): void {
+    for (const [date, note] of Object.entries(this.dailyNotes)) {
+      if (!note.tasks.some((t) => hasGoalTag(t.text, from))) continue;
+      note.tasks = note.tasks.map((t) => ({
+        ...t,
+        text: hasGoalTag(t.text, to) ? stripGoalTag(t.text, from) : renameGoalTag(t.text, from, to),
+      }));
+      this.markDirty(date, "tasks");
+    }
+  }
+
+  /** 存档落盘（改名/删除时调用；随数据仓 git 提交） */
+  private async saveGoalStats(): Promise<void> {
+    if (!persist) return;
+    await fsWrite("life/goal-stats.md", buildGoalStats(this.goalStats));
+  }
+
   /** 新建板块内 Markdown 文件（自动补 .md 后缀；同名拒绝；创建后选中） */
   createBoardFile(boardId: string, fileName: string): void {
     const b = this.lifeBoards.find((x) => x.id === boardId);
@@ -641,7 +759,8 @@ class AppState {
     this.markBoardDirty(`life/${b.name}/${f.name}`);
   }
 
-  deleteBoard(id: string): void {
+  /** 删除板块（v4.9）：keepStats=true → 热力图历史存档 life/goal-stats.md；false → 连任务标签一并清除 */
+  deleteBoard(id: string, keepStats: boolean): void {
     const b = this.lifeBoards.find((x) => x.id === id);
     this.lifeBoards = this.lifeBoards.filter((x) => x.id !== id);
     if (this.selectedLifeBoardId === id) this.selectedLifeBoardId = null;
@@ -649,11 +768,27 @@ class AppState {
       this.openedLifeBoardId = null;
       this.openedBoardFileId = null;
     }
-    if (persist && b) {
+    if (!b) return;
+    // v4.9：向用户指出历史数据保留位置（LifeBoardPage 顶部横幅展示）
+    this.boardNotice = keepStats
+      ? `板块「${b.name}」已删除；热力图历史数据（每天被任务关联的次数）已保留在 life/goal-stats.md。`
+      : `板块「${b.name}」已删除；历史数据与所有日记任务中的该板块标签已全部清除。`;
+    if (persist) {
       void (async () => {
         try {
+          if (keepStats) {
+            this.archiveBoardStats(b.name, b.name); // 过去实时值固化进存档（任务标签原样保留，历史日记不篡改）
+          } else {
+            delete this.goalStats[b.name];
+          }
+          await this.saveGoalStats();
+          if (!keepStats) this.stripGoalTagsEverywhere(b.name); // 清任务标签（内存 + flush）
           await fsDelete(`life/${b.name}`);
-          await gitAutoCommit(`删除人生板块：${b.name} · ${nowHHmm()}`);
+          await gitAutoCommit(
+            keepStats
+              ? `删除人生板块：${b.name}（热力图历史已存档 life/goal-stats.md） · ${nowHHmm()}`
+              : `删除人生板块：${b.name}（历史数据与任务标签已清除） · ${nowHHmm()}`,
+          );
         } catch (err) {
           console.error("[deleteBoard] 落盘失败", err);
         }
@@ -759,7 +894,7 @@ class AppState {
 
   /**
    * 打开某日期记：切到今日分区 + 选中该日期；
-   * 磁盘不存在 → 按模板落盘 + git 提交；
+   * 磁盘不存在 → 按 §3.2 模板落盘 + git 提交；
    * 磁盘已有但内存未载（应用运行期外部写入）→ 解析装载，避免内存空态覆盖手写内容。
    */
   openDaily(date: string): void {

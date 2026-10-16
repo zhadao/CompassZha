@@ -22,7 +22,7 @@
 └─ .backup/                    # 同步冲突留副本（阶段五）
 ```
 
-`<data_root>` 默认为 `D:\Coding\CompassZha`，可在 `config.json` 的 `data_root` 字段覆盖。
+`<data_root>` 默认为 `%USERPROFILE%\CompassZha`（Windows 用户主目录下的 `CompassZha`），可在 `config.json` 的 `data_root` 字段覆盖。
 
 ## 二、每日文件
 

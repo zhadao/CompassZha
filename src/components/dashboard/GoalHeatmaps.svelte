@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
-   * 板块投入热力图（ECharts calendar + heatmap）：
+   * 板块投入热力图（ECharts calendar+heatmap，总需求 §2.4 v4.1/v4.9）：
    * GitHub contribution 风格——人生板块每建一个板块即生成一张热力图，
    * 统计近 90 天每日清单中 #goal/<板块名> 被任务提及的次数：越多越绿，无记录为白。
-   * 数据源：store 内存态；阶段三换 SQLite 索引只改本组件取数。
+   * 数据源（v4.9「存档 ?? 实时」）：过去某天读 life/goal-stats.md 存档优先
+   * （仅改过名/删过的板块有存档，历史锁定不漂移），无存档则实时聚合；今天永远实时。
    */
   import { onMount } from "svelte";
   import { app } from "../../stores/app.svelte";
@@ -27,20 +28,12 @@
 
   type Chart = ReturnType<typeof echarts.init>;
 
-  /** 板块名转义（防正则元字符，如 C++） */
-  function escapeRe(s: string): string {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-
   /** 近 90 天每天该板块被任务提及的次数（含 0，保证无记录的天也显示白格） */
   function boardCounts(boardName: string): Array<[string, number]> {
-    const re = new RegExp(`#goal/${escapeRe(boardName)}(?=\\s|$)`);
     const out: Array<[string, number]> = [];
     for (let i = 89; i >= 0; i--) {
       const date = offsetDays(todayKey(), -i);
-      const note = app.dailyNotes[date];
-      const count = note ? note.tasks.filter((t) => re.test(t.text)).length : 0;
-      out.push([date, count]);
+      out.push([date, app.boardCountOn(boardName, date)]);
     }
     return out;
   }

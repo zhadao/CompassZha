@@ -4,7 +4,7 @@
    * - 点日期 = 查看/创建对应 daily/yyyy/yyyy-mm-dd.md 并跳转该日编辑（openDaily）；
    * - 右键日期 = 上下文菜单：打开（不存在则创建并打开）/ 收藏切换 / 删除（二次确认）；
    * - 有日记的日期下方圆点；收藏日期 ★ 高亮（文件名 star- 前缀派生）；今天描边、选中填充。
-   * 「对象」「模板」类功能不在本项目范围内。
+   * Zditor 的「对象」「模板」不引入（需求文档 v4.6 §2.2）。
    */
   import { app } from "../../stores/app.svelte";
   import { todayKey } from "../../lib/date";

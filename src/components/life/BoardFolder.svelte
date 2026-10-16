@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
-   * 板块文件夹视图：
+   * 板块文件夹视图（v4.5 落实需求 v4.2 §2.5）：
    * 点卡进入 life/<板块名>/ —— 左侧该板块的 Markdown 文件列表（新建/重命名/删除），
    * 右侧为当前选中文件的 Crepe 编辑器，编辑实时落盘。
    */
   import { app } from "../../stores/app.svelte";
+  import BoardDeleteDialog from "./BoardDeleteDialog.svelte";
   import type { BoardFile, LifeBoard } from "../../types/schema";
   import BoardEditor from "./BoardEditor.svelte";
 
@@ -21,7 +22,22 @@
   let error = $state("");
   let renamingId = $state<string | null>(null);
   let renameValue = $state("");
-  let confirmDel = $state(false);
+  /** 删除板块确认弹窗（v4.9：保留 / 清除历史数据二选一） */
+  let askDelete = $state(false);
+  /** 板块改名（v4.9 修订）：文件夹 + 默认文档 + 任务标签同步更名 + 热力图历史转记 */
+  let renamingBoard = $state(false);
+  let boardNameInput = $state("");
+
+  function startRenameBoard(): void {
+    boardNameInput = board.name;
+    renamingBoard = true;
+  }
+
+  function submitRenameBoard(): void {
+    const v = boardNameInput.trim();
+    if (v && v !== board.name) app.renameBoard(board.id, v);
+    renamingBoard = false;
+  }
 
   function createFile(): void {
     const raw = newName.trim();
@@ -71,12 +87,7 @@
   }
 
   function removeBoard(): void {
-    if (!confirmDel) {
-      confirmDel = true; // 两次点击确认，避免误删
-      setTimeout(() => (confirmDel = false), 2500);
-      return;
-    }
-    app.deleteBoard(board.id);
+    askDelete = true; // v4.9：弹窗二选一（保留 / 清除热力图历史数据）
   }
 
   /** 卡片预览：默认文件正文去 frontmatter 后首行非空行 */
@@ -98,13 +109,26 @@
     <button class="btn-secondary" onclick={() => app.closeBoard()}>← 返回</button>
     <div class="crumbs">
       <span class="crumb-icon">{board.icon}</span>
-      <span class="crumb-name">{board.name}</span>
+      {#if renamingBoard}
+        <input
+          class="board-rename-input"
+          title="回车确认改名，Esc 取消（改名后所有任务标签同步更名，热力图历史连续）"
+          value={boardNameInput}
+          oninput={(e) => (boardNameInput = e.currentTarget.value)}
+          onkeydown={(e) => {
+            if (e.key === "Enter") submitRenameBoard();
+            if (e.key === "Escape") renamingBoard = false;
+          }}
+          onblur={() => submitRenameBoard()}
+        />
+      {:else}
+        <span class="crumb-name">{board.name}</span>
+        <button class="btn-icon" title="重命名板块" onclick={startRenameBoard}>✏️</button>
+      {/if}
       <span class="crumb-path">life/{board.name}/</span>
       <span class="crumb-count">{board.files.length} 个文档</span>
     </div>
-    <button class="btn-danger" class:armed={confirmDel} onclick={removeBoard}>
-      {confirmDel ? "确认删除板块？" : "删除板块"}
-    </button>
+    <button class="btn-danger" onclick={removeBoard}>删除板块</button>
   </header>
 
   <div class="folder-body">
@@ -177,6 +201,10 @@
   </div>
 </section>
 
+{#if askDelete}
+  <BoardDeleteDialog board={board} onCancel={() => (askDelete = false)} />
+{/if}
+
 <style>
   .folder {
     display: flex;
@@ -207,6 +235,33 @@
     font-weight: 600;
   }
 
+  .btn-icon {
+    font-size: var(--font-size-xs);
+    line-height: 1;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+  }
+
+  .btn-icon:hover {
+    background-color: var(--color-surface-alt);
+  }
+
+  .board-rename-input {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    padding: 2px var(--space-2);
+    outline: none;
+    min-width: 0;
+    max-width: 200px;
+  }
+
   .crumb-path {
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
@@ -232,7 +287,7 @@
     background: transparent;
   }
 
-  .btn-danger.armed {
+  .btn-danger:hover {
     color: var(--color-danger);
     border-color: var(--color-danger);
   }

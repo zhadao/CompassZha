@@ -1,7 +1,9 @@
 <script lang="ts">
   import { app } from "../../stores/app.svelte";
+  import TaskGoalMenu from "./TaskGoalMenu.svelte";
+  import type { TaskItem } from "../../types/schema";
 
-  // #goal/xxx 文本标签识别（用于板块投入热力图统计）
+  // #goal/xxx 文本标签识别（总需求 §2.3 任务标签系统，原型期识别展示）
   interface Segment {
     type: "text" | "goal";
     value: string;
@@ -17,6 +19,8 @@
   }
 
   let newTask = $state("");
+  /** 任务右键关联板块菜单（v4.9）：{ task, 坐标 }，null = 关闭 */
+  let goalMenu = $state<{ task: TaskItem; x: number; y: number } | null>(null);
 
   function submit(e: SubmitEvent): void {
     e.preventDefault();
@@ -64,7 +68,14 @@
   {:else}
     <ul class="task-list">
       {#each app.note.tasks as t (t.id)}
-        <li class="task" class:done={t.done}>
+        <li
+          class="task"
+          class:done={t.done}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            goalMenu = { task: t, x: e.clientX, y: e.clientY };
+          }}
+        >
           <button class="check" title={t.done ? "标记为未完成" : "完成"} onclick={() => onToggle(t.id)}>
             {t.done ? "✓" : ""}
           </button>
@@ -90,8 +101,20 @@
     </ul>
   {/if}
 
-  <p class="tip">提示：勾选会立即生效；「⏭ 顺延」把任务移到明天清单（原型期数据重启还原）。</p>
+  <p class="tip">
+    提示：勾选会立即生效；「⏭ 顺延」把任务移到明天清单；<b>右键任务</b>可关联/取消关联人生板块。
+  </p>
 </section>
+
+{#if goalMenu}
+  <TaskGoalMenu
+    task={goalMenu.task}
+    date={app.selectedDate}
+    x={goalMenu.x}
+    y={goalMenu.y}
+    onClose={() => (goalMenu = null)}
+  />
+{/if}
 
 <style>
   .block {

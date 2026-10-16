@@ -10,14 +10,15 @@
   import DashboardPage from "./components/dashboard/DashboardPage.svelte";
   import LifeBoardPage from "./components/life/LifeBoardPage.svelte";
   import PomodoroPage from "./components/pomodoro/PomodoroPage.svelte";
+  import ChatPage from "./components/chat/ChatPage.svelte";
   import SettingsPage from "./components/settings/SettingsPage.svelte";
 
-  // 挂载即从磁盘装载数据（确保当天文件存在 + 扫描每日文件与板块目录）
+  // 阶段 1：挂载即从真实文件装载数据（ensureToday + 近文件扫描 + 板块扫描）
   onMount(() => {
     void app.loadAll();
   });
 
-  // 三档响应式布局，宽度监听在 store 中注册
+  // 三档响应式（总需求 §2.9），宽度监听在 store 中注册
   const tooNarrow = $derived(app.winWidth < 800);
 
   const SECTION_TITLES: Record<string, string> = {
@@ -25,6 +26,7 @@
     dashboard: "仪表盘",
     life: "人生板块",
     pomodoro: "番茄钟",
+    chat: "语料对话",
     settings: "设置",
   };
 
@@ -78,6 +80,8 @@
           <LifeBoardPage />
         {:else if app.section === "pomodoro"}
           <PomodoroPage />
+        {:else if app.section === "chat"}
+          <ChatPage />
         {:else}
           <SettingsPage />
         {/if}

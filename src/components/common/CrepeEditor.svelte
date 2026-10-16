@@ -5,7 +5,7 @@
    * - 文档每次变更回调 onUpdate（最新 Markdown 串）；防抖与落盘由调用方负责；
    * - WebView 兼容性已通过 Edge 无头探针验证（挂载/可编辑/roundtrip/监听全绿）；
    * - v4.5 工具栏精简：关 Toolbar/TopBar/LaTeX/ImageBlock/BlockEdit（用户反馈「一堆看不懂的图标」
-   *   ——「+」插入区块菜单样式混乱），保留静默写作功能。
+   *   ——「+」插入区块菜单样式混乱），保留静默写作功能（需求文档 v4.5 §2.2 约定）。
    */
   import { onMount, onDestroy } from "svelte";
   import { Crepe, CrepeFeature } from "@milkdown/crepe";

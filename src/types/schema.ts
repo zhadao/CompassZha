@@ -1,9 +1,9 @@
 /**
  * 数据 schema 类型定义。
- * 与每日文件 frontmatter 模板、
- * 派生索引的字段结构同型。
- * 预览兜底数据与真实数据共用本文件类型，
- * 保证「换数据源不换组件」。
+ * 与《CompassZha 总需求文档 v3.1》§3.2（frontmatter 模板）、
+ * §3.6（SQLite 索引 schema）同型。
+ * SPEC-011：mock 数据与真实数据共用本文件类型，
+ * 保证阶段一「换数据源不换组件」。
  */
 
 /** 每日量化指标（对应每日文件 frontmatter，UI-004：字段名一一对应；v3.1 调整） */
@@ -138,6 +138,7 @@ export type SectionId =
   | "dashboard"
   | "life"
   | "pomodoro"
+  | "chat"
   | "settings";
 
 /** 空指标（所有字段 null） */

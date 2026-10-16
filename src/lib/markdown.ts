@@ -1,6 +1,6 @@
 /**
- * Markdown 数据层。
- * 单一职责：每日文件的解析与「章节级写回」。
+ * Markdown 数据层（阶段 1 · 检查点 1.3）。
+ * 单一职责：每日文件（§3.2 v4.2 模板）的解析与「章节级写回」。
  *
  * 核心原则——章节级写回（计划关键设计 1）：
  *   应用永远只替换「被 UI 修改的章节/字段」，其余内容字节级原样保留，
@@ -13,7 +13,7 @@
  *           无法识别的章节与行原样保留不动。
  * frontmatter 解析为手写 YAML-lite（浏览器/Node 同构）：
  *   曾试 gray-matter，但其 CJS 内部 require('fs') 在 WebView 里模块加载即崩（实测），
- *   故本模块只实现本格式约束下的最小解析：标量/引号串/流式数组/注释；写入侧本就是行级手术。
+ *   故本模块只实现 §3.2 约束下的最小解析：标量/引号串/流式数组/注释；写入侧本就是行级手术。
  */
 
 import type { DailyMetrics, DailyNote, FocusSession, TaskItem } from "../types/schema";
@@ -21,7 +21,7 @@ import { emptyMetrics } from "../types/schema";
 import { genId } from "../mock/preview";
 import type { EventItem } from "../types/schema";
 
-/** frontmatter 中 UI 管理的量化指标键（其余键如 habits/goals/energy_peak 原样保留） */
+/** frontmatter 中 UI 管理的量化指标键（§3.2；其余键如 habits/goals/energy_peak 原样保留） */
 const METRIC_KEYS = [
   "sleep_hours",
   "sleep_quality",
@@ -34,7 +34,7 @@ const METRIC_KEYS = [
   "steps",
 ] as const;
 
-/** 章节标题（模板顺序） */
+/** 章节标题（§3.2 模板顺序） */
 const SECTION_TITLES = ["日程", "今日清单", "临时记录", "专注记录", "今日收尾"] as const;
 
 /* ---- 小工具 ---- */
@@ -375,9 +375,73 @@ function eolAware(text: string, fn: (lf: string) => string): string {
   return crlf ? out.replace(/\n/g, "\r\n") : out;
 }
 
+/* ---- 板块标签（#goal/<板块名>，v4.9 任务关联 GUI） ---- */
+
+/** 正则元字符转义（板块名可能含 +、括号等） */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 任务文本是否关联某板块（`#goal/<板块名>` 后须为空白或行尾，防前缀同名误判） */
+export function hasGoalTag(text: string, boardName: string): boolean {
+  return new RegExp(`#goal/${escapeRe(boardName)}(?=\\s|$)`).test(text);
+}
+
+/** 从任务文本移除某板块标签（删除板块-不保留 / 同步改名防重复时用；收敛残留空格） */
+export function stripGoalTag(text: string, boardName: string): string {
+  const re = new RegExp(`\\s*#goal/${escapeRe(boardName)}(?=\\s|$)`, "g");
+  return text.replace(re, "").replace(/\s{2,}/g, " ").trim();
+}
+
+/** 任务文本中某板块标签同步改名（#goal/旧名 → #goal/新名，v4.9 修订：改名不取消链接） */
+export function renameGoalTag(text: string, from: string, to: string): string {
+  return text.replace(new RegExp(`(#goal/)${escapeRe(from)}(?=\\s|$)`, "g"), `$1${to}`);
+}
+
+/* ---- 板块投入历史存档（v4.9：life/goal-stats.md，热力图「存档 ?? 实时」数据源） ---- */
+
+/** 板块名 → 日期(yyyy-mm-dd) → 当天被任务关联的次数 */
+export type GoalStats = Record<string, Record<string, number>>;
+
+/** 解析存档文件：`## <板块名>` 小节 + `- yyyy-mm-dd · N` 行（容错 CRLF/全半角空白） */
+export function parseGoalStats(text: string): GoalStats {
+  const lf = text.includes("\r\n") ? text.replace(/\r\n/g, "\n") : text;
+  const out: GoalStats = {};
+  let current: string | null = null;
+  for (const line of lf.split("\n")) {
+    const h = /^##[ \t\u3000]+(.+?)[ \t\u3000]*$/.exec(line);
+    if (h) {
+      current = h[1].trim();
+      if (current) out[current] ??= {};
+      continue;
+    }
+    if (!current) continue;
+    const m = /^[-*][ \t\u3000]*(\d{4}-\d{2}-\d{2})[ \t\u3000]*[·•][ \t\u3000]*(\d+)[ \t\u3000]*$/.exec(line);
+    if (m) out[current][m[1]] = Number(m[2]);
+  }
+  return out;
+}
+
+/** 序列化存档文件（板块名 zh 排序、日期升序；空小节不落盘） */
+export function buildGoalStats(stats: GoalStats): string {
+  const lines = [
+    "# 板块投入历史",
+    "",
+    "> 自动生成：板块改名/删除时快照「每天被任务关联的次数」；热力图优先读取，请勿手改。",
+    "",
+  ];
+  for (const name of Object.keys(stats).sort((a, b) => a.localeCompare(b, "zh"))) {
+    const days = stats[name];
+    const keys = Object.keys(days).sort();
+    if (keys.length === 0) continue;
+    lines.push(`## ${name}`, ...keys.map((d) => `- ${d} · ${days[d]}`), "");
+  }
+  return lines.join("\n");
+}
+
 /* ---- 模板与全量序列化 ---- */
 
-/** 每日模板：空 frontmatter（全部指标 null）+ 五个空章节 */
+/** §3.2 v4.2 模板：空 frontmatter（全部指标 null）+ 五个空章节 */
 export function buildDailyFile(date: string, metrics: DailyMetrics | null = null): string {
   const m = metrics ?? emptyMetrics();
   return [

@@ -8,7 +8,7 @@ src-tauri/gen/schemas/
 *.old
 
 # ---- 运行时用户数据（本应用的业务数据，绝不入库） ----
-# 应用默认把数据写到 data_root（默认 D:\Coding\CompassZha），
+# 应用默认把数据写到 data_root（默认 %USERPROFILE%\CompassZha），
 # 若你把 data_root 指到本仓库内，下列规则可防止个人日记被误提交。
 # 注意：必须以 / 锚定到仓库根，否则会误伤同名源码目录（如 src/components/life/）。
 /daily/

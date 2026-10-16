@@ -9,6 +9,7 @@
     { id: "dashboard", label: "仪表盘", icon: "📊" },
     { id: "life", label: "人生板块", icon: "🧭" },
     { id: "pomodoro", label: "番茄钟", icon: "🍅" },
+    { id: "chat", label: "语料对话", icon: "💬" },
     { id: "settings", label: "设置", icon: "⚙️" },
   ];
 </script>
@@ -41,11 +42,6 @@
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
-      <button class="nav-item disabled" disabled title="v2 才上线的 RAG 自我对话">
-        <span class="nav-icon">💬</span>
-        <span class="nav-label">语料对话</span>
-        <span class="v2-tag">v2</span>
-      </button>
     </nav>
 
     <FileTree />
@@ -69,9 +65,6 @@
           {item.icon}
         </button>
       {/each}
-      <button class="nav-item icon-only disabled" disabled title="语料对话（v2）">
-        💬
-      </button>
     </div>
     <div class="git-status-collapsed"><span class="dot"></span></div>
   {/if}
@@ -168,20 +161,6 @@
     background-color: var(--color-primary-light);
     color: var(--color-primary);
     font-weight: 600;
-  }
-
-  .nav-item.disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .v2-tag {
-    margin-left: auto;
-    font-size: var(--font-size-xs);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 0 var(--space-1);
-    color: var(--color-text-tertiary);
   }
 
   .git-status {

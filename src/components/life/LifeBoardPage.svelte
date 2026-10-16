@@ -36,8 +36,16 @@
 <div class="page">
   <StaticBadge />
 
+  {#if app.boardNotice}
+    <!-- v4.9：板块删除结果横幅（告知热力图历史数据保留位置） -->
+    <div class="board-notice">
+      <span>{app.boardNotice}</span>
+      <button class="notice-x" title="知道了" onclick={() => (app.boardNotice = null)}>✕</button>
+    </div>
+  {/if}
+
   {#if openedBoard}
-    <!-- 文件夹视图：进入该板块的 life/<板块名>/ -->
+    <!-- 文件夹视图：进入该板块的 life/<板块名>/（v4.5 落实 v4.2 §2.5） -->
     <BoardFolder board={openedBoard} />
   {:else if creating}
     <!-- 新建板块表单 -->
@@ -83,6 +91,33 @@
 </div>
 
 <style>
+  /* v4.9：板块删除结果横幅 */
+  .board-notice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .notice-x {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+    padding: 0 var(--space-1);
+  }
+
+  .notice-x:hover {
+    color: var(--color-text-primary);
+  }
   .page {
     position: relative;
   }

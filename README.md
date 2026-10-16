@@ -48,7 +48,9 @@
 - **轻录入、重回看**：录入动作尽量少点击（表单一次填完九项指标），价值集中在仪表盘、日历与
   长期趋势这些「回看」场景。
 - **不造轮子**：编辑器、日历、图表、解析器一律使用成熟的开源组件，项目本身只写业务胶水层。
-- **数据完全属于你**：无遥测、无网络请求、无账号体系。应用做的事只有读写你本地的 Markdown。
+- **数据完全属于你**：无遥测、无账号体系、无服务器。日记与量化数据永远只在本地读写；
+  只有当你主动使用「语料对话」或「AI 数据分析」时，才会把**你选择发送的内容**经你自己填写的
+  AI API 发出（API Key 只存系统凭据管理器，软件不内置任何密钥，也绝不把你的数据发给第三方）。
 
 ## 功能一览
 
@@ -101,18 +103,39 @@
 - 点卡片进入「板块文件夹视图」：左侧该板块的 Markdown 文件列表，右侧编辑器实时落盘。
 - 板块内可**新建 / 重命名 / 删除**多个 Markdown 文件，分别梳理同一板块的不同思路。
 
+### 语料对话（AI）
+
+- 把任意 Markdown 语料直接丢进数据目录的 `corpus\`——**不需要分类建文件夹**，交叉主题也只放一份，
+  主题筛选交给 AI 在检索时完成。
+- 在「语料对话」分区提问：AI 先在**你本地**检索语料，再以检索结果为据作答，并列出引用出处
+  （引用到具体文件）。
+- 检索走轻量 RAG：AI 扩词选卡 → 本地关键词打分检索 → 生成回答；语料不足时明确提示
+  「未得到语料库的充分支撑」后由 AI 直接作答，不会硬凑。
+- **索引卡**：8 张主题卡是 AI 的**检索筛选器**（不是文件夹），可在界面内编辑其关键词以调整检索路由。
+- 提供「资源跳转」（直接打开语料文件夹）与「说明」（API 使用 / 语料存放 / 隐私说明）。
+
+### 仪表盘 AI 数据分析（AI）
+
+- 仪表盘**顶端**的「📊 AI 数据分析」按钮，点击弹出独立对话窗（不占用新的左侧分区）。
+- AI 基于你已录入的量化指标（睡眠时长、睡眠质量、入睡 / 起床时间、体重、当日支出、心情、
+  专注时长、运动步数）做统计、趋势分析与建议——例如「哪几天睡得比较晚」「这个月支出怎么样」。
+- 该工作区**只回答数据相关问题**，其余提问统一回复「该工作区只能回答数据相关的问题。」，
+  不会变成漫无边际的聊天机器人。
+- 每次提问只发一次 AI 调用，且只上传这九项数字（**不传日记正文**）。
+
 ## 界面分区
 
-左侧竖导航固定六个分区，三栏布局（导航 / 主区 / 右栏详情）：
+左侧竖导航固定七个分区，三栏布局（导航 / 主区 / 右栏详情）：
 
 | 分区 | 内容 |
 | --- | --- |
 | 每日 | 当天日记正文、清单、指标表单、迷你日记月历 |
 | 日历 | FullCalendar 四视图、事件编辑器、当日 Markdown 预览 |
-| 仪表盘 | 八项指标卡、趋势七折线、板块投入热力图 |
+| 仪表盘 | 八项指标卡、趋势七折线、板块投入热力图、AI 数据分析入口 |
 | 人生板块 | 板块卡片网格 / 板块文件夹视图 |
 | 番茄钟 | 双模式计时器与历史专注记录 |
-| 设置 | 数据目录、git 同步、AI 配置（后两项随后续阶段启用） |
+| 语料对话 | 语料问答（带出处引用）、索引卡编辑、说明 |
+| 设置 | 数据目录、git 同步、AI 配置（主 API + 可选的数据分析专用 API） |
 
 窗口宽度分三档响应式（≥1280 / 800–1280 / <800），右栏可手动收起。
 
@@ -148,10 +171,10 @@ npm run tauri build -- --no-bundle  # 生成免安装可执行文件
 
 ## 数据存放与格式
 
-应用默认把数据写在 **`D:\Coding\CompassZha`**，目录结构如下：
+应用默认把数据写在 **`%USERPROFILE%\CompassZha`**（Windows 用户主目录下的 `CompassZha`），目录结构如下：
 
 ```
-D:\Coding\CompassZha\
+%USERPROFILE%\CompassZha\
 ├─ config.json                     # 应用配置（数据目录、git 远端、AI 配置等）
 ├─ daily\
 │  └─ 2026\
@@ -170,7 +193,6 @@ D:\Coding\CompassZha\
 
 > **换数据目录**：首次启动后编辑数据目录里的 `config.json`，把 `data_root` 指向你想要的路径即可。
 > `config.json` 自身从默认根目录读取，因此第一步必须先让应用在默认目录完成首次初始化。
-> 若你的机器没有 D 盘，请修改 `src-tauri/src/fs_cmds.rs` 中的 `DEFAULT_DATA_ROOT` 常量后重新编译。
 
 单日文件长这样（完整字段说明见 [docs/DATA-FORMAT.md](docs/DATA-FORMAT.md)）：
 
@@ -216,15 +238,17 @@ CompassZha/
 │  │  ├─ layout/                   # Sidebar / DetailPanel / 文件树
 │  │  ├─ today/                    # 每日分区：日记、清单、指标表单、迷你月历
 │  │  ├─ calendar/                 # 日历分区：FullCalendar 封装、事件编辑器
-│  │  ├─ dashboard/                # 仪表盘：指标卡、趋势图、热力图
+│  │  ├─ dashboard/                # 仪表盘：指标卡、趋势图、热力图、AI 数据分析弹层
 │  │  ├─ pomodoro/                 # 番茄钟：双模式计时器、专注记录列表
 │  │  ├─ life/                     # 人生板块：卡片网格、板块文件夹视图
+│  │  ├─ chat/                     # 语料对话：对话线程、索引卡编辑、说明
 │  │  ├─ common/                   # 通用组件（Crepe 编辑器封装等）
-│  │  └─ settings/                 # 设置分区
+│  │  └─ settings/                 # 设置分区（数据目录 / git 同步 / AI 配置）
 │  ├─ stores/app.svelte.ts         # 全局状态单例，组件与数据源之间的唯一接缝
 │  ├─ lib/
 │  │  ├─ markdown.ts               # Markdown 解析与「章节级写回」
-│  │  ├─ tauri-fs.ts               # 唯一允许 invoke 的地方，路径安全层
+│  │  ├─ tauri-fs.ts               # 数据层 invoke 包装（路径安全层）
+│  │  ├─ ai.ts                     # AI 对话 / 数据分析 invoke 包装
 │  │  └─ date.ts                   # 日期工具
 │  ├─ mock/preview.ts              # 浏览器预览兜底数据 + id 生成器
 │  ├─ types/schema.ts              # 领域模型类型定义
@@ -233,9 +257,14 @@ CompassZha/
 │  ├─ src/
 │  │  ├─ main.rs                   # 进程入口
 │  │  ├─ lib.rs                    # 应用装配与命令注册
-│  │  └─ fs_cmds.rs                # 文件系统命令（异步 + 路径校验 + 无黑窗 git 子进程）
+│  │  ├─ fs_cmds.rs                # 文件系统命令（异步 + 路径校验 + 无黑窗 git 子进程）
+│  │  ├─ git_sync.rs               # GitHub 私密仓库同步（PAT 只进系统凭据管理器）
+│  │  ├─ ai_chat.rs                # AI 对话与数据分析（DeepSeek 直连，Key 只进凭据管理器）
+│  │  ├─ corpus_search.rs          # 本地轻量语料检索（关键词打分）
+│  │  └─ config_topics.rs          # 索引卡读写
 │  ├─ icons/                       # 应用图标
 │  └─ tauri.conf.json
+├─ release/                        # 免安装可执行文件（下载即用）
 ├─ docs/                           # 架构、数据格式、路线图
 ├─ .github/                        # Issue / PR 模板与 CI
 ├─ CONTRIBUTING.md
@@ -253,7 +282,8 @@ CompassZha/
 | 编辑器 | [Milkdown Crepe](https://milkdown.dev)（MIT） | 所见即所得 Markdown，仅保留静默写作功能 |
 | 日历 | [FullCalendar 6](https://fullcalendar.io)（MIT） | 日 / 周 / 月 / 清单视图与拖拽交互 |
 | 图表 | [Apache ECharts 6](https://echarts.apache.org) | 趋势折线与日历热力图 |
-| 存储 | 纯 Markdown 文件 + 本地 git | 无数据库；索引为可选派生数据，可整库重建 |
+| AI | [DeepSeek](https://platform.deepseek.com)（用户自携 API Key） | 语料对话与数据分析；Key 只进系统凭据管理器 |
+| 存储 | 纯 Markdown 文件 + 本地 git | 无数据库；语料检索为本地关键词打分，索引可整库重建 |
 
 ## 路线图
 
@@ -263,8 +293,8 @@ CompassZha/
 | 1 | 数据层：Markdown 读写、模板、本地 git 自动提交 | 已完成 |
 | 2 | 编辑器升级（CodeMirror 6 → Milkdown Crepe）、日记日历 | 已完成 |
 | 3 | 番茄钟双模式、日历接真、仪表盘（指标卡 / 七折线 / 热力图） | 已完成 |
-| 4 | 语料库与 AI 对话（本地检索 + 回答带出处） | 计划中 |
-| 5 | GitHub 私密仓库同步、Windows 安装包 | 计划中 |
+| 4 | 语料库与 AI 对话（本地检索 + 回答带出处）、仪表盘 AI 数据分析 | 已完成 |
+| 5 | GitHub 私密仓库同步、Windows 安装包 | 进行中（同步已落地，安装包待做） |
 
 详细说明见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
@@ -301,6 +331,13 @@ Highlights:
   and a dual-mode Pomodoro timer (countdown + stopwatch) that logs to `## 专注记录`.
 - A dashboard with eight metric cards, seven switchable (7 / 30 / 90-day) trend lines, and
   GitHub-contribution-style heatmaps per life area based on `#goal/<area>` tag mentions.
+- **Corpus chat**: drop any Markdown into `corpus\` (no folders needed) and ask questions — the AI
+  retrieves from your local corpus first, answers with citations, and says so plainly when the corpus
+  has nothing to support an answer.
+- **Dashboard AI analysis**: ask about your own tracked metrics (sleep, weight, spending, mood,
+  focus, steps). This workspace answers data questions only.
+- Your own AI API key (DeepSeek) lives in the Windows Credential Manager — never in a file.
+  Nothing leaves your machine unless you explicitly use one of the two AI workspaces.
 
 Build from source with `npm install` then `npm run tauri dev`; produce a standalone executable with
 `npm run tauri build -- --no-bundle`. Licensed under MIT.
