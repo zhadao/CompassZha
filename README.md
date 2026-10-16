@@ -134,7 +134,7 @@
 ### 方式二：从源码构建
 
 ```bash
-git clone https://github.com/CompassZha/CompassZha.git
+git clone https://github.com/zhadao/CompassZha.git
 cd CompassZha
 
 npm install                       # 安装前端依赖

@@ -42,5 +42,5 @@
 - 章节级「手术式写回」：只替换被修改的章节，用户手改内容字节级保留。
 - 全部业务数据以纯 Markdown 文件存储，无数据库、无专有格式，便于 AI 直接读取分析。
 
-[未发布]: https://github.com/CompassZha/CompassZha/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/CompassZha/CompassZha/releases/tag/v0.1.0
+[未发布]: https://github.com/zhadao/CompassZha/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/zhadao/CompassZha/releases/tag/v0.1.0

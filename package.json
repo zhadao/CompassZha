@@ -8,11 +8,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/CompassZha/CompassZha.git"
+    "url": "git+https://github.com/zhadao/CompassZha.git"
   },
-  "homepage": "https://github.com/CompassZha/CompassZha#readme",
+  "homepage": "https://github.com/zhadao/CompassZha#readme",
   "bugs": {
-    "url": "https://github.com/CompassZha/CompassZha/issues"
+    "url": "https://github.com/zhadao/CompassZha/issues"
   },
   "keywords": [
     "tauri",
