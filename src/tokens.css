@@ -1,0 +1,62 @@
+/* ============================================================
+ * CompassZha 设计 tokens（CODE-006：组件只允许引用本文件变量）
+ * 风格对标 usememos/memos：浅色中性背景、白底圆角卡片、
+ * 细边框、单一强调色、充足留白。
+ * 状态：原型首版，待用户截图确认后冻结。
+ * ============================================================ */
+
+:root {
+  /* ---- 色板 ---- */
+  /* 主色：克制使用的单一强调色（选中态 / 主按钮 / 链接） */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #dbeafe;
+
+  /* 背景：浅色中性 */
+  --color-bg: #f6f7f9;
+  /* 卡片 / 面板背景 */
+  --color-surface: #ffffff;
+  /* 次级表面（输入框底、悬浮层） */
+  --color-surface-alt: #f1f2f4;
+
+  /* 文字三级色 */
+  --color-text-primary: #1f2329;
+  --color-text-secondary: #646a73;
+  --color-text-tertiary: #8f959e;
+
+  /* 边框 */
+  --color-border: #e3e5e8;
+  --color-border-strong: #c9ccd0;
+
+  /* 语义色 */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-muted: #9ca3af;
+
+  /* ---- 字号（五档） ---- */
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* ---- 间距（四档） ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* ---- 布局固定尺寸（UI-001：三栏固定，不可拖拽） ---- */
+  --sidebar-width: 200px;
+  --sidebar-width-collapsed: 56px;
+  --detail-width: 280px;
+
+  /* ---- 过渡 ---- */
+  --transition-fast: 120ms ease;
+}

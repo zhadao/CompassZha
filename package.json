@@ -1,0 +1,52 @@
+{
+  "name": "compasszha",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CompassZha · 本地优先的个人人生仪表盘（Markdown 数据 + Tauri 2 + Svelte 5）",
+  "license": "MIT",
+  "author": "CompassZha",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CompassZha/CompassZha.git"
+  },
+  "homepage": "https://github.com/CompassZha/CompassZha#readme",
+  "bugs": {
+    "url": "https://github.com/CompassZha/CompassZha/issues"
+  },
+  "keywords": [
+    "tauri",
+    "svelte",
+    "markdown",
+    "journal",
+    "dashboard",
+    "local-first",
+    "quantified-self"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fullcalendar/core": "^6.1.15",
+    "@fullcalendar/daygrid": "^6.1.15",
+    "@fullcalendar/interaction": "^6.1.15",
+    "@fullcalendar/list": "^6.1.15",
+    "@fullcalendar/timegrid": "^6.1.15",
+    "@milkdown/crepe": "^7.22.3",
+    "@milkdown/kit": "^7.22.3",
+    "@tauri-apps/api": "^2.1.1",
+    "echarts": "^6.1.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tauri-apps/cli": "^2.1.0",
+    "svelte": "^5.16.0",
+    "svelte-check": "^4.1.1",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.7"
+  }
+}

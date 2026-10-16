@@ -1,0 +1,16 @@
+# 文本文件统一 LF 入库（Windows 检出时可自动转 CRLF）
+* text=auto
+
+*.md   text eol=lf
+*.ts   text eol=lf
+*.svelte text eol=lf
+*.json text eol=lf
+*.rs   text eol=lf
+*.toml text eol=lf
+*.yml  text eol=lf
+
+# 二进制文件不做行尾转换
+*.png  binary
+*.ico  binary
+*.icns binary
+*.exe  binary

@@ -1,0 +1,27 @@
+# ---- 构建产物与依赖（不入库） ----
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+*.log
+.tmp*
+*.old
+
+# ---- 运行时用户数据（本应用的业务数据，绝不入库） ----
+# 应用默认把数据写到 data_root（默认 D:\Coding\CompassZha），
+# 若你把 data_root 指到本仓库内，下列规则可防止个人日记被误提交。
+daily/
+life/
+corpus/
+projects/
+reviews/
+.index/
+.backup/
+config.json
+
+# ---- 编辑器 / 操作系统杂项 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

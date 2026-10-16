@@ -1,0 +1,256 @@
+<script lang="ts">
+  /**
+   * 番茄钟（双模式）：
+   * - 倒计时：预设 10/25/40 + 自定义分钟 + 任务标题；到点自动记录，可提前「结束并记录」
+   * - 正计时：停表那一刻即结束并记录
+   * 计时在 store 层全局运行（切分区继续走）；记录写入当日 ## 专注记录 + 累加 focus_minutes（阶段三 3.1 已接真）。
+   */
+  import { app } from "../../stores/app.svelte";
+  import StaticBadge from "../layout/StaticBadge.svelte";
+  import FocusRecordList from "./FocusRecordList.svelte";
+
+  const purpose =
+    "干什么：记录专注时间。倒计时用于限定时长的短任务，正计时不知道会专注多久时用——停表即记录，数据进仪表盘与当日日记。";
+
+  const PRESETS = [10, 25, 40];
+  /** 模式选择（仅空闲时可切） */
+  let modeSel = $state<"countdown" | "stopwatch">("countdown");
+  let presetMin = $state(25);
+  let customMin = $state("");
+  let title = $state("");
+
+  const t = $derived(app.timer);
+  const running = $derived(t.phase !== "idle");
+
+  /** 当前生效分钟数（自定义合法则覆盖预设） */
+  const effMin = $derived.by(() => {
+    const c = Number(customMin);
+    return customMin !== "" && !Number.isNaN(c) && c >= 1 && c <= 600 ? Math.floor(c) : presetMin;
+  });
+
+  /** 大数字显示：倒计时剩余 / 正计时已计 */
+  const display = $derived.by(() => {
+    const sec =
+      t.mode === "countdown" ? Math.max(0, t.targetMin * 60 - t.elapsedSec) : t.elapsedSec;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  });
+
+  const statusText = $derived(
+    t.phase === "running"
+      ? t.mode === "countdown"
+        ? `倒计时 · ${t.title || "未命名任务"}`
+        : `正计时中 · ${t.title || "未命名任务"}`
+      : t.phase === "paused"
+        ? "已暂停"
+        : "准备开始",
+  );
+
+  function start(): void {
+    if (modeSel === "countdown") {
+      app.startCountdown(effMin, title);
+    } else {
+      app.startStopwatch(title);
+    }
+  }
+
+  /** 提示：停表记录不足 1 分钟不生效 */
+  function stop(): void {
+    app.stopAndRecord();
+  }
+</script>
+
+<div class="page">
+  <StaticBadge />
+  <p class="purpose">{purpose}</p>
+
+  <section class="card block center">
+    {#if running}
+      <!-- 运行 / 暂停态：显示实时计时 -->
+      <div class="mode-tag">{t.mode === "countdown" ? "倒计时" : "正计时"}</div>
+      <div class="timer" class:running={t.phase === "running"} class:paused={t.phase === "paused"}>
+        {display}
+      </div>
+      <p class="status">{statusText}</p>
+      <div class="btns">
+        {#if t.phase === "running"}
+          <button class="btn-secondary" onclick={() => app.pauseTimer()}>暂停</button>
+        {:else}
+          <button class="btn-primary" onclick={() => app.resumeTimer()}>继续</button>
+        {/if}
+        <button class="btn-primary" onclick={stop}>
+          {t.mode === "stopwatch" ? "停表（记录本次）" : "结束并记录"}
+        </button>
+        <button class="btn-secondary" onclick={() => app.resetTimer()}>放弃</button>
+      </div>
+    {:else if modeSel === "countdown"}
+      <!-- 空闲 · 倒计时配置 -->
+      <div class="tabs">
+        <button class="tab active">倒计时</button>
+        <button class="tab" onclick={() => (modeSel = "stopwatch")}>正计时</button>
+      </div>
+      <div class="timer idle">{`${String(effMin).padStart(2, "0")}:00`}</div>
+      <p class="status">给自己限定一段专注时间</p>
+      <div class="config">
+        <div class="preset-row">
+          {#each PRESETS as p (p)}
+            <button class="preset" class:active={presetMin === p && customMin === ""} onclick={() => { presetMin = p; customMin = ""; }}>
+              {p} 分钟
+            </button>
+          {/each}
+        </div>
+        <input
+          class="custom-min"
+          type="number"
+          min="1"
+          max="600"
+          placeholder="自定义分钟"
+          bind:value={customMin}
+        />
+        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（任务标题）" bind:value={title} />
+      </div>
+      <div class="btns">
+        <button class="btn-primary" onclick={start}>开始倒计时</button>
+      </div>
+    {:else}
+      <!-- 空闲 · 正计时配置 -->
+      <div class="tabs">
+        <button class="tab" onclick={() => (modeSel = "countdown")}>倒计时</button>
+        <button class="tab active">正计时</button>
+      </div>
+      <div class="timer idle">00:00</div>
+      <p class="status">不知道会专注多久？开始后自由专注，停表那一刻即记录</p>
+      <div class="config">
+        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（任务标题）" bind:value={title} />
+      </div>
+      <div class="btns">
+        <button class="btn-primary" onclick={start}>开始专注</button>
+      </div>
+    {/if}
+  </section>
+
+  <FocusRecordList />
+</div>
+
+<style>
+  .page {
+    position: relative;
+  }
+
+  .purpose {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-2);
+  }
+
+  .block {
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  .block.center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .tabs {
+    display: flex;
+    gap: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1);
+  }
+
+  .tab {
+    font-size: var(--font-size-sm);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .tab.active {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .mode-tag {
+    font-size: var(--font-size-xs);
+    color: var(--color-surface);
+    background-color: var(--color-primary);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .timer {
+    font-size: 64px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+    transition: color var(--transition-fast);
+  }
+
+  .timer.running {
+    color: var(--color-primary);
+  }
+
+  .timer.paused {
+    color: var(--color-warning);
+  }
+
+  .timer.idle {
+    color: var(--color-text-secondary);
+  }
+
+  .status {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+  }
+
+  .config {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .preset-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .preset {
+    font-size: var(--font-size-sm);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+  }
+
+  .preset.active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background-color: var(--color-primary-light);
+    font-weight: 600;
+  }
+
+  .custom-min {
+    width: 160px;
+    text-align: center;
+  }
+
+  .title-input {
+    width: 100%;
+  }
+
+  .btns {
+    display: flex;
+    gap: var(--space-2);
+  }
+</style>
