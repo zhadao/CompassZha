@@ -138,6 +138,7 @@ export type SectionId =
   | "dashboard"
   | "life"
   | "pomodoro"
+  | "chat"
   | "settings";
 
 /** 空指标（所有字段 null） */

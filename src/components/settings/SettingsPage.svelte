@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import StaticBadge from "../layout/StaticBadge.svelte";
   import SettingsHelp from "./SettingsHelp.svelte";
+  import AiConfigSection from "./AiConfigSection.svelte";
   import {
     gitSyncGetConfig,
     gitSyncSetConfig,
@@ -162,6 +163,8 @@
         <p class="feedback" class:err={feedbackErr}>{feedback}</p>
       {/if}
     </section>
+
+    <AiConfigSection />
   {/if}
 
   {#if helpOpen}

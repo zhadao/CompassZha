@@ -10,6 +10,7 @@
   import DashboardPage from "./components/dashboard/DashboardPage.svelte";
   import LifeBoardPage from "./components/life/LifeBoardPage.svelte";
   import PomodoroPage from "./components/pomodoro/PomodoroPage.svelte";
+  import ChatPage from "./components/chat/ChatPage.svelte";
   import SettingsPage from "./components/settings/SettingsPage.svelte";
 
   // 阶段 1：挂载即从真实文件装载数据（ensureToday + 近文件扫描 + 板块扫描）
@@ -25,6 +26,7 @@
     dashboard: "仪表盘",
     life: "人生板块",
     pomodoro: "番茄钟",
+    chat: "语料对话",
     settings: "设置",
   };
 
@@ -78,6 +80,8 @@
           <LifeBoardPage />
         {:else if app.section === "pomodoro"}
           <PomodoroPage />
+        {:else if app.section === "chat"}
+          <ChatPage />
         {:else}
           <SettingsPage />
         {/if}
