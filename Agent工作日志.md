@@ -20,6 +20,28 @@
 
 ---
 
+## 2026-10-17 09:50 | GLM-5.3 (Trae Agent) | 任务来源：用户「现在又有这个报错了…整个软件现在都打不开了」→「执行吧」→「要让陌生用户下了之后能直接用」
+
+**做了什么：**
+- 定位 v0.2.2 交付 exe 全部打不开（窗口报「无法访问此页面 localhost 拒绝连接 ERR_CONNECTION_REFUSED」）的根因：上一条记录中「vite+cargo 两步直构」的结论**错误**，作废
+- 用 `tauri build --no-bundle` 重建正式版 exe（新 MD5 `CC5B23EE…`，6224KB），四方分发一致：target/release、`release版本\CompassZha\`、`安装包\CompassZha便携版\`、GitHub Release zip 资产（--clobber 覆盖，3,828,718 bytes）
+- 启动冒烟测试通过：窗口存活、标题「CompassZha · 人生仪表盘」
+- 清理 dist 中 6 份历史残留 index-*.js（21.7MB 垃圾），重建后仅剩单一入口
+
+**关键发现：**
+- （实测·根因）裸 `cargo build --release` 不带 `--features tauri/custom-protocol`，tauri-build 判定 `is_dev()=true`（构建脚本输出 `cargo:rustc-cfg=dev`），exe 运行时去连 devUrl `localhost:1420`，vite 没跑就必然 ERR_CONNECTION_REFUSED；且此 exe 内**不含**任何前端资源字符串（人生仪表盘/隆中对均 False）
+- （实测）tauri CLI（node_modules 内 win32 原生模块）确含 `tauri/custom-protocol` 字符串，正规 `npm run tauri build` 会自动启用 custom-protocol → 前端资源内嵌（新 exe 中 人生仪表盘/隆中对 = True）
+- （实测）`tauri build --no-bundle` 可跳过 NSIS 打包只产 exe，规避 DLL 卡点，同时保证非 dev 模式；构建耗时 1m30s
+- （实测）沙箱模式下 tauri CLI 构建在「Compiling compass」处被杀（exit -1 无输出），须非沙箱运行
+
+**留下的问题 / 下一步：**
+- 【铁律】以后交付只能用 `npm run tauri build`（或其 `--no-bundle` 变体），**禁止**拿裸 cargo 产物交付
+- 【待办·不变】NSIS setup.exe 补制仍延后（网络恢复后下载 `nsis_tauri_utils.dll`）
+
+**涉及文件：** `src-tauri\target\release\compass.exe`（重建）；`release版本\CompassZha\CompassZha.exe`、`安装包\CompassZha便携版\CompassZha.exe`（覆盖分发）；`安装包\CompassZha_v0.2.2_portable_win64.zip`（重打+上传）；GitHub Release v0.2.2 资产（已覆盖）；双日志
+
+---
+
 ## 2026-10-17 09:13 | GLM-5.3 (Trae Agent) | 任务来源：用户「提交到 https://github.com/zhadao/CompassZha 这个库里，并且 release」
 
 **做了什么：**
