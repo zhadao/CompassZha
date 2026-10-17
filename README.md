@@ -5,6 +5,12 @@
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB.svg)](https://tauri.app)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00.svg)](https://svelte.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6.svg)](https://www.typescriptlang.org)
+[![Release](https://img.shields.io/github/v/release/zhadao/CompassZha)](https://github.com/zhadao/CompassZha/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/zhadao/CompassZha/total)](https://github.com/zhadao/CompassZha/releases)
+
+<p align="center">
+  <img src="assets/readme/hero.svg" alt="CompassZha 人生仪表盘：本地优先，日记、日程、专注与趋势全部是纯 Markdown 文件，只存在你自己的硬盘上" width="100%">
+</p>
 
 一个运行在 Windows 本地的**个人「人生仪表盘」**桌面应用。数据全部以 Markdown 文件保存在你自己
 的硬盘上，没有云端、没有账号、没有数据库。
@@ -145,14 +151,21 @@
 | --- | --- |
 | 操作系统 | Windows 10 / 11 64 位 |
 | WebView2 | 系统自带（如缺失，安装 [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)） |
-| 运行免安装版 | 无需其他依赖 |
+| 运行安装版 / 便携版 | 无需其他依赖 |
 | 从源码构建 | Node.js ≥ 18、Rust ≥ 1.77（stable-msvc）、Visual Studio Build Tools |
 
 ## 快速开始
 
-### 方式一：直接运行（推荐普通用户）
+### 方式一：直接安装（推荐普通用户）
 
-下载 `release/CompassZha.exe`，双击即可。首次运行会在数据目录生成当天的 Markdown 文件。
+前往 [**Releases**](https://github.com/zhadao/CompassZha/releases/latest) 下载，两种形态任选：
+
+| 下载文件 | 形态 | 说明 |
+| --- | --- | --- |
+| `CompassZha_*_x64-setup.exe` | **安装版** | 标准 Windows 安装向导（含 MIT 协议页），可自选安装位置，默认装到 `D:\CompassZha`；卸载走系统「应用和功能」 |
+| `CompassZha_v*_portable_win64.zip` | **便携版** | 解压到任意目录，双击 `CompassZha.exe` 即用，无需安装 |
+
+两种形态的数据都自动存放在**程序目录下的 `data\` 文件夹**（与 exe 同级）；首次启动会自动生成全部目录与当天的 Markdown 文件。
 
 ### 方式二：从源码构建
 
@@ -171,14 +184,15 @@ npm run tauri build -- --no-bundle  # 生成免安装可执行文件
 
 ## 数据存放与格式
 
-应用默认把数据写在 **`%USERPROFILE%\CompassZha`**（Windows 用户主目录下的 `CompassZha`），目录结构如下：
+数据全部写在**程序目录下的 `data\` 文件夹**（安装版与便携版一致，数据永远跟着程序走）；若从源码以开发模式运行，则写在 **`%APPDATA%\CompassZha`**。目录结构如下：
 
 ```
-%USERPROFILE%\CompassZha\
-├─ config.json                     # 应用配置（数据目录、git 远端、AI 配置等）
+{数据根}\                          # 安装/便携版 = 程序目录\data\；开发模式 = %APPDATA%\CompassZha
+├─ config.json                     # 应用配置（外观 / AI / Git / 关闭行为等）
+├─ README.md                       # 数据目录说明（首次启动自动生成）
 ├─ daily\
 │  └─ 2026\
-│     ├─ 2026-10-16.md             # 一天的完整记录
+│     ├─ 2026-10-16.md             # 一天的完整记录（日记 + 日程 + 清单 + 指标）
 │     └─ star-2026-10-15.md        # 收藏过的日记
 ├─ life\
 │  ├─ 健康\                         # 一个板块 = 一个文件夹
@@ -186,9 +200,10 @@ npm run tauri build -- --no-bundle  # 生成免安装可执行文件
 │  │  └─ 睡眠实验.md
 │  └─ 事业\
 │     └─ 事业.md
-├─ corpus\                         # 语料库（阶段四 AI 检索使用）
-├─ .index\                         # 派生索引（可随时整库重建）
-└─ .backup\                        # 冲突留副本（阶段五同步使用）
+├─ events\                         # 循环事件规则库（循环日程只记规则，不预生成远期事件）
+├─ corpus\                         # 语料库（AI 语料对话检索；直接丢 .md 进来即可，无需分类）
+├─ conversations\                  # AI 对话归档（应用内「保存本轮对话」写入）
+└─ .backup\                        # 本地快照（自动维护，不进 Git）
 ```
 
 > **换数据目录**：首次启动后编辑数据目录里的 `config.json`，把 `data_root` 指向你想要的路径即可。
@@ -294,7 +309,7 @@ CompassZha/
 | 2 | 编辑器升级（CodeMirror 6 → Milkdown Crepe）、日记日历 | 已完成 |
 | 3 | 番茄钟双模式、日历接真、仪表盘（指标卡 / 七折线 / 热力图） | 已完成 |
 | 4 | 语料库与 AI 对话（本地检索 + 回答带出处）、仪表盘 AI 数据分析 | 已完成 |
-| 5 | GitHub 私密仓库同步、Windows 安装包 | 进行中（同步已落地，安装包待做） |
+| 5 | GitHub 私密仓库同步、Windows 安装包 | 主体完成（同步已落地；v0.2.2 起提供安装包与便携包） |
 
 详细说明见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
@@ -339,7 +354,9 @@ Highlights:
 - Your own AI API key (DeepSeek) lives in the Windows Credential Manager — never in a file.
   Nothing leaves your machine unless you explicitly use one of the two AI workspaces.
 
-Build from source with `npm install` then `npm run tauri dev`; produce a standalone executable with
+Download the Windows installer (setup wizard, defaults to `D:\CompassZha`) or the portable build
+from the [Releases](https://github.com/zhadao/CompassZha/releases/latest) page. Build from source
+with `npm install` then `npm run tauri dev`; produce a standalone executable with
 `npm run tauri build -- --no-bundle`. Licensed under MIT.
 
 ## 致谢 / Acknowledgements
