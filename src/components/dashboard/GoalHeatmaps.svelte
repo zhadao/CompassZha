@@ -1,112 +1,35 @@
 <script lang="ts">
   /**
-   * 板块投入热力图（ECharts calendar+heatmap，总需求 §2.4 v4.1/v4.9）：
-   * GitHub contribution 风格——人生板块每建一个板块即生成一张热力图，
-   * 统计近 90 天每日清单中 #goal/<板块名> 被任务提及的次数：越多越绿，无记录为白。
+   * 板块投入热力图（v4.28 重写，总需求 §2.4）：
+   * 人生板块每建一个板块即生成一张 GitHub contribution 风格的投入热力图——
+   * 统计每日清单中 #goal/<板块名> 被任务提及的次数：越多越绿，无记录为白。
+   * 排版与配色对齐 grubersjoe/react-activity-calendar（网格计算见 lib/heatmap.ts，
+   * 渲染见 HeatGrid.svelte，本组件只负责分区容器与板块标题）。
    * 数据源（v4.9「存档 ?? 实时」）：过去某天读 life/goal-stats.md 存档优先
    * （仅改过名/删过的板块有存档，历史锁定不漂移），无存档则实时聚合；今天永远实时。
+   * 板块标题图标走 BoardIcon(board.icon)，与板块卡片/面包屑/右栏摘要同源，保证图标一致。
    */
-  import { onMount } from "svelte";
   import { app } from "../../stores/app.svelte";
-  import { offsetDays, todayKey } from "../../lib/date";
+  import { todayKey } from "../../lib/date";
+  import { buildHeatGrid, HEAT_RANGE_TEXT } from "../../lib/heatmap";
+  import type { HeatGrid as Grid } from "../../lib/heatmap";
   import BoardIcon from "../common/BoardIcon.svelte";
-  import * as echarts from "echarts/core";
-  import { HeatmapChart } from "echarts/charts";
-  import {
-    CalendarComponent,
-    TooltipComponent,
-    VisualMapComponent,
-  } from "echarts/components";
-  import { CanvasRenderer } from "echarts/renderers";
+  import HeatGrid from "./HeatGrid.svelte";
 
-  echarts.use([
-    HeatmapChart,
-    CalendarComponent,
-    TooltipComponent,
-    VisualMapComponent,
-    CanvasRenderer,
-  ]);
-
-  type Chart = ReturnType<typeof echarts.init>;
-
-  /** 近 90 天每天该板块被任务提及的次数（含 0，保证无记录的天也显示白格） */
-  function boardCounts(boardName: string): Array<[string, number]> {
-    const out: Array<[string, number]> = [];
-    for (let i = 89; i >= 0; i--) {
-      const date = offsetDays(todayKey(), -i);
-      out.push([date, app.boardCountOn(boardName, date)]);
+  const grids = $derived.by(() => {
+    const today = todayKey();
+    const map = new Map<string, Grid>();
+    for (const b of app.lifeBoards) {
+      map.set(b.id, buildHeatGrid(today, (date) => app.boardCountOn(b.name, date)));
     }
-    return out;
-  }
-
-  /** GitHub 五档配色：0 白灰 → 4+ 深绿 */
-  function buildOption(boardName: string, data: Array<[string, number]>): Record<string, unknown> {
-    return {
-      tooltip: {
-        formatter: (p: unknown) => {
-          const d = p as { value: [string, number] };
-          return `${d.value[0]}<br/>${boardName}：${d.value[1]} 次提及`;
-        },
-      },
-      visualMap: {
-        show: false,
-        type: "piecewise",
-        pieces: [
-          { value: 0, color: "#ebedf0" },
-          { value: 1, color: "#9be9a8" },
-          { value: 2, color: "#40c463" },
-          { value: 3, color: "#30a14e" },
-          { min: 4, color: "#216e39" },
-        ],
-      },
-      calendar: {
-        top: 22,
-        left: 36,
-        right: 12,
-        cellSize: ["auto", 13],
-        range: [offsetDays(todayKey(), -89), todayKey()],
-        itemStyle: { color: "#ebedf0", borderColor: "#fff", borderWidth: 2 },
-        splitLine: { show: false },
-        yearLabel: { show: false },
-        monthLabel: { nameMap: "ZH", color: "#9ca3af", fontSize: 10 },
-        dayLabel: { nameMap: "ZH", color: "#9ca3af", fontSize: 10 },
-      },
-      series: [{ type: "heatmap", coordinateSystem: "calendar", data }],
-    };
-  }
-
-  const els: Record<string, HTMLDivElement> = {};
-  let chartMap = new Map<string, Chart>();
-
-  onMount(() => {
-    const onResize = () => chartMap.forEach((c) => c.resize());
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      chartMap.forEach((c) => c.dispose());
-      chartMap.clear();
-    };
-  });
-
-  // 板块增删 / 任务提及变化 → 重建各板块热力图
-  $effect(() => {
-    const boards = app.lifeBoards.map((b) => ({ id: b.id, name: b.name }));
-    chartMap.forEach((c) => c.dispose());
-    chartMap.clear();
-    for (const b of boards) {
-      const el = els[b.id];
-      if (!el) continue;
-      const chart = echarts.init(el);
-      chart.setOption(buildOption(b.name, boardCounts(b.name)));
-      chartMap.set(b.id, chart);
-    }
+    return map;
   });
 </script>
 
 <section class="card block">
   <h2 class="block-title">
     板块投入热力图
-    <span class="range-tag">近 90 天</span>
+    <span class="range-tag">{HEAT_RANGE_TEXT}</span>
   </h2>
   {#if app.lifeBoards.length === 0}
     <p class="empty">
@@ -115,13 +38,16 @@
     </p>
   {:else}
     {#each app.lifeBoards as board (board.id)}
-      <div class="heat-box">
-        <h3 class="heat-name">
-          <BoardIcon icon={board.icon} size={30} />
-          {board.name}
-        </h3>
-        <div class="heat-chart" bind:this={els[board.id]}></div>
-      </div>
+      {@const grid = grids.get(board.id)}
+      {#if grid}
+        <div class="heat-box">
+          <h3 class="heat-name">
+            <BoardIcon icon={board.icon} size={22} />
+            {board.name}
+          </h3>
+          <HeatGrid {grid} board={board.name} />
+        </div>
+      {/if}
     {/each}
   {/if}
 </section>
@@ -153,20 +79,18 @@
   .heat-box {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     margin-bottom: var(--space-2);
   }
 
   .heat-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-text-secondary);
-    padding-left: var(--space-1);
-  }
-
-  .heat-chart {
-    width: 100%;
-    height: 140px;
+    margin-bottom: var(--space-1);
   }
 
   .empty {
@@ -175,5 +99,4 @@
     padding: var(--space-3);
     text-align: center;
   }
-
 </style>

@@ -3,7 +3,13 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [未发布]
+## [0.2.5] - 2026-10-18
+
+### 变更
+
+- **板块投入热力图重写为 GitHub contribution 风格**：弃用 ECharts 日历热力图（格子被拉成长方形，观感扁平呆板），改为原生 Svelte 网格——正方形圆角格子自适应铺满卡片宽度、5 档绿色梯度、月份/星期标签、悬停浮层、右下角图例；统计窗口由近 90 天改为近一年（53 周），对齐 GitHub 一年视图。
+- **板块图标一致性**：热力图板块标题图标与板块卡片、文件夹面包屑、右栏摘要、任务「关联板块」菜单统一由 `BoardIcon` 渲染 `board.icon`，同一板块各处图标严格一致。
+- **MD 编辑器移除链接浮层**：Crepe 关闭 `LinkTooltip`，正文底部常驻的「铅笔 / 垃圾桶图标 + Paste link... 输入框」一并消失。
 
 ### 计划中
 
@@ -182,7 +188,8 @@ API Key，数据仍只保存在本地 Markdown——软件不内置任何密钥�
 - 章节级「手术式写回」：只替换被修改的章节，用户手改内容字节级保留。
 - 全部业务数据以纯 Markdown 文件存储，无数据库、无专有格式，便于 AI 直接读取分析。
 
-[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.4...HEAD
+[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.5
 [0.2.4]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.4
 [0.2.3]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.3
 [0.2.2]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.2

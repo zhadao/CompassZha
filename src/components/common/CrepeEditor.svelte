@@ -6,6 +6,8 @@
    * - WebView 兼容性已通过 Edge 无头探针验证（挂载/可编辑/roundtrip/监听全绿）；
    * - v4.5 工具栏精简：关 Toolbar/TopBar/LaTeX/ImageBlock/BlockEdit（用户反馈「一堆看不懂的图标」
    *   ——「+」插入区块菜单样式混乱），保留静默写作功能（需求文档 v4.5 §2.2 约定）。
+   * - v4.28 再精简：补关 LinkTooltip——正文底部常驻的链接浮层（铅笔/垃圾桶图标 + 「Paste link...」
+   *   输入框）此前未被关闭，属用户反馈的多余 UI（需求文档 v4.28 §2.2）。
    */
   import { onMount, onDestroy } from "svelte";
   import { Crepe, CrepeFeature } from "@milkdown/crepe";
@@ -34,6 +36,8 @@
         [CrepeFeature.Latex]: false,
         [CrepeFeature.ImageBlock]: false,
         [CrepeFeature.BlockEdit]: false,
+        // v4.28：关闭链接浮层——此前漏关，正文底部常驻「铅笔/垃圾桶图标 + Paste link... 输入框」
+        [CrepeFeature.LinkTooltip]: false,
       },
     });
     c.on((api) => {

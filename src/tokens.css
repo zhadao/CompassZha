@@ -100,6 +100,13 @@
   --color-border: #d1d9e0;
   --color-border-strong: #9198a1;
 
+  /* v4.28 热力图专用：GitHub contribution 五档绿（0 = 空，4 = 最深），对齐 github.com 配色 */
+  --heat-0: #ebedf0;
+  --heat-1: #9be9a8;
+  --heat-2: #40c463;
+  --heat-3: #30a14e;
+  --heat-4: #216e39;
+
   /* 语义色（文字 = 各组加深档；底色 = 各组提亮档） */
   --color-success: #366a01;
   --color-success-bg: #eff7e6;
@@ -143,6 +150,13 @@
   --color-text-tertiary: #6e7681;
   --color-border: #3d444d;
   --color-border-strong: #5c6673;
+
+  /* v4.28 热力图专用（深色）：GitHub contribution 五档绿深色版 */
+  --heat-0: #161b22;
+  --heat-1: #0e4429;
+  --heat-2: #006d32;
+  --heat-3: #26a641;
+  --heat-4: #39d353;
 
   /* 语义色：文字提亮档，底色加深档 */
   --color-success: #8cc84e;
