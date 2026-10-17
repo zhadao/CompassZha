@@ -20,6 +20,31 @@
 
 ---
 
+## 2026-10-17 10:26 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「NSIS 那条路现在卡在缺 `nsis_tauri_utils.dll`，得先试着补上（代理现在是通的）这个试着补上，把安装程序做出来」
+
+**做了什么：**
+- 补齐 NSIS 工具链：经 `curl.exe -x http://127.0.0.1:17890` 取 `nsis_tauri_utils.dll`（SHA1 `75197FEE…` 与官方一致），另 `nsis-3.13.zip` 由 CLI 构建时联网自取，hash 校验通过
+- 产出标准 Windows 安装器：`npm run tauri build`（非沙箱）→ `CompassZha_0.2.2_x64-setup.exe`（3,447,366 bytes，MD5 `CE03495CE961FC289AC740543BE1E0A9`）
+- 静默安装实测：`/S` 退出码 0，默认落到 `D:\CompassZha`（安装前不存在），内含 `compass.exe` 6,373,376 bytes（与验证过的好 exe 同尺寸）+ `portable.txt` 0 bytes + `uninstall.exe`
+- 渲染产物核对：`target\release\nsis\x64\installer.nsi` 第 132-133 行侧栏、169-171 行授权页条件、477-478 行双语、728-729 行 POSTINSTALL 钩子均已编入
+- 收尾：卸载测试安装并清残留 `D:\CompassZha`；setup.exe 落位 `安装包\`；删中间产物 `nsis\_extract*.nsi`
+
+**关键发现：**
+- （实测）三项决策全部生效：默认目录 `D:\CompassZha`（`${FileExists} "D:\*.*"` 判定，缺 D 盘回落 `%LOCALAPPDATA%`）、左侧海报（`sidebar.bmp` 164×314）、授权页（`bundle.licenseFile=../LICENSE` 驱动默认模板条件页）
+- （实测）安装完成钩子写空 `portable.txt` → 数据根解析为 `<安装目录>/data`，与便携版一致（用户拍板「data 文件夹和 exe 同级即可」）
+- （实测）NSIS 卸载器**不清理** `portable.txt`（钩子产物不被卸载清单登记），卸载后需手工删该目录残留
+- （实测）Tauri NSIS 配置无「授权页开关」项，授权页由 `licenseFile` 是否存在驱动；无「安装目录选项」开关，目录选择页由模板内置
+- （推测）欢迎/完成页的具体视觉呈现（海报位置、授权滚动页）无法无头验证，须用户肉眼走查一次向导
+
+**留下的问题 / 下一步：**
+- 【待用户】双击安装器肉眼走查向导四页（欢迎+海报 / MIT 授权 / 选安装位置 / 完成），确认观感后决定是否上传 Release
+- 【可选】将 `CompassZha_0.2.2_x64-setup.exe` 上传 GitHub Release v0.2.2（与便携 zip 并列）
+- 【可选·旧】数据仓 `zhadao/compasstext` 47 提交未推送；git 全局 `https.proxy` 仍指死端口 7897，建议用户清理
+
+**涉及文件：** `src-tauri\tauri.conf.json`（bundle 配置）；`src-tauri\nsis\installer.nsi`（自定义模板，仅改默认安装目录）；`src-tauri\nsis\portable-hooks.nsh`（POSTINSTALL 钩子）；`src-tauri\nsis\sidebar.bmp`（海报）；`安装包\CompassZha_0.2.2_x64-setup.exe`（落位）；`CompassZha-总需求文档-v4.0.md`（升 v4.24，双副本同步）
+
+---
+
 ## 2026-10-17 10:01 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「把便携版的 release 做的干净一些，请让便携包只留 exe + portable.txt + 说明.txt，让程序首次启动自己生成全部 data」
 
 **做了什么：**

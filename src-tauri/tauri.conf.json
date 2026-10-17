@@ -29,6 +29,16 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "licenseFile": "../LICENSE",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "nsis/installer.nsi",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "installerHooks": "nsis/portable-hooks.nsh",
+        "languages": ["English", "SimpChinese"]
+      }
+    }
   }
 }

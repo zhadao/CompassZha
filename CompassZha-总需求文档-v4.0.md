@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档版本 | v4.23 |
+| 文档版本 | v4.24 |
 | 创建日期 | 2026-10-15（v1.0 同日创建；v2.0 曾用暂名 Compass、误称 DMD；v3.x 为旧自研路线） |
-| 最后更新 | 2026-10-17（v4.23：工作空间五区大整理——安装包收尾、目录结构定稿、活数据迁标准根） |
-| 项目状态 | 阶段 0~2 已过门禁；阶段 3 主体已过 M4 基础走查（SQLite 索引推迟阶段 4）；阶段 4 功能已落地待走查；v4.17 外观大改已交用户实机走查，v4.18~v4.21 为四轮走查反馈落地；v4.22 为面向用户体验收敛 + 交付就绪的五项需求；v4.23 为工作空间五区大整理与交付归位 |
+| 最后更新 | 2026-10-17（v4.24：NSIS 常规 Windows 安装器落地——默认装 `D:\CompassZha`、MIT 授权页、左侧海报、安装即写 `portable.txt`） |
+| 项目状态 | 阶段 0~2 已过门禁；阶段 3 主体已过 M4 基础走查（SQLite 索引推迟阶段 4）；阶段 4 功能已落地待走查；v4.17 外观大改已交用户实机走查，v4.18~v4.21 为四轮走查反馈落地；v4.22 为面向用户体验收敛 + 交付就绪的五项需求；v4.23 工作空间五区大整理；v4.24 常规 Windows 安装器（NSIS）交付 |
 | 文档性质 | 需求与阶段检查点的**唯一权威来源**；与《spec规范.md》（技术选型与红线）配套；冲突时先改文档再改代码 |
 | 底本 | 前版本《CompassZha 总需求文档 v3.1》（文件名误标 v3.0，内容实为 v3.1），按新基底重对齐 |
 
@@ -23,6 +23,15 @@
 2. **指标全图表化**：睡眠时长、入睡/起床时间、体重、当日支出、心情、专注时长、运动步数全部纳入趋势图（七图）；时间范围新增 90 天档（7/30/90 可切换）。
 3. **删除静态「目标投入」统计**：其数据本质是人生板块内容，板块由用户自建，静态假数据与逻辑不符，移除。
 4. **新增板块投入热力图**：GitHub contribution 风格日历热力图，按 `#goal/<板块名>` 标签聚合每日清单任务 mention 次数——次数越多色块越绿，无记录为白；用户在人生板块建一个板块，仪表盘即生成一张对应热力图（详见 §2.4）。
+
+## v4.24 变更摘要（相对 v4.23，2026-10-17 常规 Windows 安装器交付）
+
+1. **NSIS 常规安装器（更新 §4.5/§4.7）**：产出标准 Windows 安装向导 `CompassZha_0.2.2_x64-setup.exe`——双击后依次为欢迎页（左侧海报）→ MIT 开源授权页 → 安装位置选择页 → 安装；卸载项写入「应用和功能」。
+2. **默认安装目录 `D:\CompassZha`（用户拍板）**：`installMode=currentUser` 下 `$INSTDIR` 默认取 `D:\${PRODUCTNAME}`；D 盘缺失时回落 `%LOCALAPPDATA%`。安装位置选择页仍可改。
+3. **数据与 exe 同级（用户拍板）**：安装完成钩子（`NSIS_HOOK_POSTINSTALL`）在安装目录写入空 `portable.txt`，使运行形态数据根解析为 `<安装目录>/data`（§3.1 运行形态默认根第 1 条），与便携版一致，满足「data 文件夹和 exe 同级即可」。
+4. **授权页 + 左侧海报**：`bundle.licenseFile=../LICENSE` 驱动默认模板条件授权页（MIT 全文）；`sidebarImage=nsis/sidebar.bmp`（164×314）作为欢迎/完成页左侧竖版海报。
+5. **多语言**：安装向导内置 `English` + `SimpChinese` 两套语言。
+6. **自定义模板落位**：`src-tauri/nsis/installer.nsi`（由 CLI 内置模板抽取后仅改默认安装目录一处），`src-tauri/nsis/portable-hooks.nsh`（安装后写 portable.txt 钩子）。构建仍须非沙箱 `npm run tauri build`。
 
 ## v4.23 变更摘要（相对 v4.22，2026-10-17 工作空间五区大整理）
 
@@ -642,7 +651,7 @@ CREATE INDEX idx_tasks_date ON tasks(date);
 | 5.2 私密仓配置（v4.10 前移） | 设置页可填仓库地址/分支/PAT，PAT 存 Windows 凭据管理器且不回显；「立即同步」后 GitHub 远端可见数据更新（删除同步/冲突弹窗仍在阶段 5，发布前手验 TEST-002） |
 | 5.3 本地快照 | 每小时快照 `.backup/` 保留 7 天，可手动恢复 |
 | 5.4 设置界面 | Git/AI key/路径配置；key 入系统密钥链（SPEC-012）——**Git 部分 v4.10 已前移交付**，AI key 随阶段 4 接入 |
-| 5.5 安装包（v4.22 明确形态） | Windows 安装包 <100MB；全新机器可装可跑；提交前隐私自查（无 key/私密语料）；**便携版**（绿色，数据落 exe 同级 `data/`）+ **Windows 安装包**双形态，详见 §4.7 |
+| 5.5 安装包（v4.22 明确形态；v4.24 已产出 NSIS 安装器） | Windows 安装包 <100MB；全新机器可装可跑；提交前隐私自查（无 key/私密语料）；**便携版**（绿色，数据落 exe 同级 `data/`）+ **Windows 安装包**双形态，详见 §4.7 |
 
 ## 4.6 阶段总览
 
@@ -675,8 +684,23 @@ CREATE INDEX idx_tasks_date ON tasks(date);
 **硬约束**：
 1. **不得包含**：`.pdb` 调试符号、`.log` 文件、开发用 JSON 配置、Cargo `target/` 工作区文件、`.map` 源映射等开发痕迹。
 2. 交付目录**白名单拷贝**（只拷 exe / 必要运行时资源 / portable.txt / README.txt），不做整目录复制。
-3. 便携版数据根 = `<exe 同级>/data`（绿色软件体验，§3.1）；安装版数据根 = `%APPDATA%\CompassZha`（§3.3）。
+3. 便携版数据根 = `<exe 同级>/data`（绿色软件体验，§3.1）；**安装版安装后在同级写入 `portable.txt`，数据根亦为 `<安装目录>/data`**（v4.24 用户拍板「data 文件夹和 exe 同级即可」，§4.7 安装器规格）。
 4. 提交前隐私自查：无 DeepSeek API key、无 GitHub PAT、无用户私密语料（SPEC-012）。
+
+**安装器规格（v4.24，NSIS）**：
+
+| 项 | 取值 | 实现 |
+| --- | --- | --- |
+| 安装模式 | `installMode=currentUser`（免管理员） | `bundle.windows.nsis.installMode` |
+| 默认安装目录 | `D:\CompassZha`（D 盘缺失回落 `%LOCALAPPDATA%\CompassZha`） | 自定义模板 `installer.nsi` `currentUser` 分支，`${FileExists} "D:\*.*"` 判定 |
+| 安装位置可改 | 是 | 模板内置 `MUI_PAGE_DIRECTORY` |
+| 授权页 | MIT 全文（安装前展示） | `bundle.licenseFile=../LICENSE` → 模板 `!if "${LICENSE}" != ""` 条件页 |
+| 左侧海报 | `nsis/sidebar.bmp`（164×314，用户提供） | `bundle.windows.nsis.sidebarImage` |
+| 数据与 exe 同级 | 安装完成写空 `portable.txt` | `nsis/portable-hooks.nsh` 的 `NSIS_HOOK_POSTINSTALL` |
+| 语言 | English + SimpChinese | `bundle.windows.nsis.languages` |
+| 产物 | `CompassZha_{version}_x64-setup.exe`（约 3.3MB） | `npm run tauri build`（非沙箱） |
+
+> 注：安装器不含授权页开关配置项，授权页由 `licenseFile` 是否存在驱动；默认模板已内置欢迎/完成页侧栏位与目录选择页。自定义模板从 CLI 内置模板抽取，仅改默认安装目录一处，其余保持上游。
 
 **平台范围（本机约束）**：本项目开发机为 Windows，本地产出**便携版 + Windows 安装包**；`.dmg`（macOS）与 `.deb`（Linux）**需在对应平台或 CI 构建**，不在 Windows 单机伪造。安装包构建若受网络/工具链限制失败，只交付便携版并如实登记待办，不以空文件充数。
 
@@ -688,7 +712,7 @@ CREATE INDEX idx_tasks_date ON tasks(date);
 
 ```
 {工作区根}/
-├── 安装包/               # 对外发布物：NSIS 安装器（或降级便携包）
+├── 安装包/               # 对外发布物：NSIS 安装器（CompassZha_{ver}_x64-setup.exe）+ 便携 zip
 ├── 项目文件/
 │   └── 主工程compass/     # 开发源码（Svelte + Rust，代码仓在此）
 ├── release版本/
