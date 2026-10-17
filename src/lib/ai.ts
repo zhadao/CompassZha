@@ -89,3 +89,31 @@ export const configGetTopics = (): Promise<TopicCard[]> =>
 /** 保存全部索引卡（整组替换） */
 export const configSetTopics = (topics: TopicCard[]): Promise<void> =>
   invoke<void>("config_set_topics", { topics });
+
+// ---- v4.26 语料导入 ----
+
+/** 导入结果（corpus_import.rs ImportResult） */
+export interface ImportResult {
+  files_selected: number;
+  files_converted: number;
+  files_failed: number;
+  output_dir: string;
+  details: string[];
+}
+
+/** 弹文件选择器（多选 epub/pdf），取消返回空数组。
+ *  v4.26 修正：改用 Tauri 官方 dialog 插件（rfd 在 async 命令线程 Windows 下弹不出）。 */
+export const pickCorpusFiles = async (): Promise<string[]> => {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    multiple: true,
+    title: "选择要转化的文件（epub / pdf，可多选）",
+    filters: [{ name: "电子书 / PDF", extensions: ["epub", "pdf"] }],
+  });
+  if (!picked) return []; // 用户取消
+  return Array.isArray(picked) ? picked : [picked];
+};
+
+/** 将选定文件逐个转为 md，落 corpus/<书名>/ */
+export const importCorpusFile = (paths: string[]): Promise<ImportResult> =>
+  invoke<ImportResult>("import_corpus_file", { paths });

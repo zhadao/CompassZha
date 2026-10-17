@@ -1,9 +1,10 @@
 // 语料检索（阶段 4 · 检查点 4.2）：L1 关键词打分。
-// - 范围严格限定 dataRoot/corpus/ 下全部 .md——daily/（日记与量化数据）与 life/（板块）
+// - 范围严格限定 dataRoot/corpus/ 下全部 .md/.txt/.json——daily/（日记与量化数据）与 life/（板块）
 //   绝不进入检索（v4.12 用户澄清：对话语料仅用户主动放入 corpus/ 的文件）；
 // - 接口固定（进：关键词/卡 id；出：带出处的段落列表）：未来 L2（SQLite FTS 索引）
 //   与 L3（向量检索）只换本模块内部实现，调用方与前端零改动；
 // - 纯本地只读：段落按空行切分、单段截 500 字、默认取 top-12 段（控制上下文长度与库大小无关）。
+// - v4.26：白名单从 .md 扩到 .md/.txt/.json，epub/pdf 通过导入按钮自动转 md 后入库。
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -71,6 +72,14 @@ fn is_meta_file(stem: &str) -> bool {
         )
 }
 
+/// v4.26 支持的语料文件扩展名（小写）：md/txt/json 均可被检索。
+fn is_supported_ext(p: &Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| matches!(e.to_lowercase().as_str(), "md" | "txt" | "json"))
+        .unwrap_or(false)
+}
+
 /// 单段命中（corpus_search 返回；带出处供 AI 标注引用）。
 #[derive(Serialize, Clone)]
 pub struct CorpusHit {
@@ -116,7 +125,7 @@ pub fn corpus_search(
                     continue;
                 }
                 stack.push(p);
-            } else if p.extension().map(|e| e == "md").unwrap_or(false) {
+            } else if is_supported_ext(&p) {
                 if p.file_stem().map(|s| is_meta_file(&s.to_string_lossy())).unwrap_or(false) {
                     continue;
                 }

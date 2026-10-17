@@ -3,9 +3,11 @@
 // v4.12：语料检索（corpus_search）、AI 对话（ai_chat）、索引卡管理（config_topics）。
 // v4.17：外观偏好（appearance）。
 // v4.22：窗口生命周期（win_cmds）——关闭三段式 + 系统托盘驻留 + 打开数据目录。
+// v4.26：语料导入（corpus_import）——epub/pdf → md 落 corpus/imported/。
 mod ai_chat;
 mod appearance;
 mod config_topics;
+mod corpus_import;
 mod corpus_search;
 mod fs_cmds;
 mod git_sync;
@@ -14,6 +16,8 @@ mod win_cmds;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // v4.26：官方文件对话框插件（语料转化的文件选择）
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             fs_cmds::bootstrap();
             // v4.22：托盘常驻（图标即窗口默认图标；左键唤回、右键菜单）
@@ -60,6 +64,7 @@ pub fn run() {
             win_cmds::close_behavior_set,
             win_cmds::app_exit,
             win_cmds::hide_to_tray,
+            corpus_import::import_corpus_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

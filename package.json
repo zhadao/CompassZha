@@ -1,7 +1,7 @@
 {
   "name": "compasszha",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "CompassZha 人生仪表盘 · 主工程（阶段 1+）",
   "type": "module",
   "scripts": {
@@ -20,6 +20,7 @@
     "@milkdown/crepe": "^7.22.3",
     "@milkdown/kit": "^7.22.3",
     "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-dialog": "^2.8.3",
     "echarts": "^6.1.0"
   },
   "devDependencies": {

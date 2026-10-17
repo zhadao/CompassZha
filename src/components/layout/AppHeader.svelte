@@ -25,9 +25,14 @@
   });
 </script>
 
-<header class="app-header">
+<header class="app-header" data-tauri-drag-region>
+  <!-- v4.26 作者自用版标识：仅当构建期注入 VITE_AUTHOR_BUILD=1 时才渲染。
+       默认（公开发布版）不进入产物——失败安全，避免作者标识混入公开包。 -->
+  {#if import.meta.env.VITE_AUTHOR_BUILD === "1"}
+    <span class="author-badge" aria-hidden="true">author-ZHA</span>
+  {/if}
   <!-- 拖拽填充区：整条留白区可拖动窗口 -->
-  <div class="drag-fill" data-tauri-drag-region></div>
+  <div class="drag-fill"></div>
 
   <div class="win-buttons">
     <button
@@ -179,5 +184,18 @@
   .win-btn:active {
     transform: scale(0.94);
     opacity: 0.8;
+  }
+
+  /* v4.26 作者自用版标识：最左小小灰色字样，极低存在感，不抢标题栏视觉 */
+  .author-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+    color: var(--color-text-tertiary);
+    opacity: 0.7;
+    user-select: none;
   }
 </style>

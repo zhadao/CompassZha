@@ -5,17 +5,21 @@
   // v4.22 §2.12：工具栏「保存本轮对话」把整轮对话归档为 conversations/*.md。
   import { onMount } from "svelte";
   import { app } from "../../stores/app.svelte";
-  import { persist, fsReveal } from "../../lib/tauri-fs";
+  import { persist, fsReveal, revealPath } from "../../lib/tauri-fs";
   import {
     aiGetConfig,
     aiAsk,
     openCorpusFolder,
+    pickCorpusFiles,
+    importCorpusFile,
     type ChatMsg,
+    type ImportResult,
   } from "../../lib/ai";
   import type { ChatBubble } from "../../lib/chat-export";
   import ChatThread from "./ChatThread.svelte";
   import ChatHelp from "./ChatHelp.svelte";
   import TopicCardsEditor from "./TopicCardsEditor.svelte";
+  import CorpusConvertInfo from "./CorpusConvertInfo.svelte";
   import Icon from "../common/Icon.svelte";
   import ContextMenu from "../common/ContextMenu.svelte";
 
@@ -33,6 +37,12 @@
   /** v4.22 §2.12：保存结果提示 + 「打开所在文件夹」 */
   let saveMsg = $state("");
   let saveErr = $state(false);
+  /** v4.26 §2.14：语料导入状态 */
+  let importing = $state(false);
+  let importResult = $state<ImportResult | null>(null);
+  let importErr = $state("");
+  /** v4.26：语料转化前置说明弹窗（点按钮先提示支持范围与扫描件限制） */
+  let convertInfoOpen = $state(false);
 
   onMount(async () => {
     if (!persist) return;
@@ -98,6 +108,33 @@
       // 打开失败静默
     }
   }
+
+  /** v4.26 §2.14：语料转化——弹文件选择器 → epub/pdf 转 md → 落 corpus/<书名>/ */
+  async function importCorpus() {
+    importResult = null;
+    importErr = "";
+    try {
+      const paths = await pickCorpusFiles();
+      if (paths.length === 0) return; // 用户取消
+      importing = true;
+      const r = await importCorpusFile(paths);
+      importResult = r;
+    } catch (e) {
+      importErr = `${e}`;
+    } finally {
+      importing = false;
+    }
+  }
+
+  /** v4.26：转化完成后打开语料库目录（绝对路径，explorer 直达） */
+  async function revealImported() {
+    if (!importResult) return;
+    try {
+      await revealPath(importResult.output_dir);
+    } catch {
+      // 静默
+    }
+  }
 </script>
 
 <div class="chat-page">
@@ -105,6 +142,15 @@
     <button class="btn-secondary tool-btn" onclick={() => void openCorpusFolder()}>
       <Icon name="file" size={21} />
       资源跳转
+    </button>
+    <button
+      class="btn-secondary tool-btn"
+      disabled={importing}
+      title="把 PDF / EPUB 电子书转成 Markdown，存入语料库"
+      onclick={() => (convertInfoOpen = true)}
+    >
+      <Icon name="writing" size={21} />
+      {importing ? "正在转化…" : "语料转化"}
     </button>
     <button class="btn-secondary tool-btn" onclick={() => (cardsOpen = true)}>
       <Icon name="index-card" size={21} />
@@ -136,6 +182,23 @@
           打开所在文件夹
         </button>
       {/if}
+    </div>
+  {/if}
+
+  {#if importResult}
+    <div class="save-note" class:err={importResult.files_failed > 0}>
+      <span class="save-text">
+        语料转化完成：成功 {importResult.files_converted} · 失败 {importResult.files_failed}
+        · 已存入语料库
+      </span>
+      <button class="btn-secondary save-open" onclick={() => void revealImported()}>
+        打开语料库
+      </button>
+    </div>
+  {/if}
+  {#if importErr}
+    <div class="save-note err">
+      <span class="save-text">语料转化失败：{importErr}</span>
     </div>
   {/if}
 
@@ -181,6 +244,16 @@
 {#if cardsOpen}
   <TopicCardsEditor onclose={() => (cardsOpen = false)} />
 {/if}
+
+{#if convertInfoOpen}
+  <CorpusConvertInfo
+    onconfirm={() => {
+      convertInfoOpen = false;
+      void importCorpus();
+    }}
+    oncancel={() => (convertInfoOpen = false)}
+  />
+{/if}
 {#if copyMenu}
   <ContextMenu
     x={copyMenu.x}
@@ -209,6 +282,7 @@
 
   .toolbar {
     display: flex;
+    flex-wrap: wrap; /* v4.26：窄空间按钮整体换行，避免单个按钮文字被竖排 */
     align-items: center;
     gap: var(--space-2);
   }
@@ -217,6 +291,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
+    white-space: nowrap; /* v4.26：按钮文字禁止折行（「索引卡」曾被竖排三行） */
+    flex-shrink: 0;
   }
 
   .corpus-path {

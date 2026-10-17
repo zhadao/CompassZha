@@ -256,7 +256,7 @@ CompassZha/
 │  │  ├─ dashboard/                # 仪表盘：指标卡、趋势图、热力图、AI 数据分析弹层
 │  │  ├─ pomodoro/                 # 番茄钟：双模式计时器、专注记录列表
 │  │  ├─ life/                     # 人生板块：卡片网格、板块文件夹视图
-│  │  ├─ chat/                     # 语料对话：对话线程、索引卡编辑、说明
+│  │  ├─ chat/                     # 语料对话：对话线程、索引卡编辑、语料转化、说明
 │  │  ├─ common/                   # 通用组件（Crepe 编辑器封装等）
 │  │  └─ settings/                 # 设置分区（数据目录 / git 同步 / AI 配置）
 │  ├─ stores/app.svelte.ts         # 全局状态单例，组件与数据源之间的唯一接缝
@@ -276,10 +276,10 @@ CompassZha/
 │  │  ├─ git_sync.rs               # GitHub 私密仓库同步（PAT 只进系统凭据管理器）
 │  │  ├─ ai_chat.rs                # AI 对话与数据分析（DeepSeek 直连，Key 只进凭据管理器）
 │  │  ├─ corpus_search.rs          # 本地轻量语料检索（关键词打分）
+│  │  ├─ corpus_import.rs          # 语料转化（epub / pdf → Markdown，纯 Rust 本地转换）
 │  │  └─ config_topics.rs          # 索引卡读写
 │  ├─ icons/                       # 应用图标
 │  └─ tauri.conf.json
-├─ release/                        # 免安装可执行文件（下载即用）
 ├─ docs/                           # 架构、数据格式、路线图
 ├─ .github/                        # Issue / PR 模板与 CI
 ├─ CONTRIBUTING.md

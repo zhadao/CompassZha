@@ -1,6 +1,6 @@
 [package]
 name = "compass"
-version = "0.2.2"
+version = "0.2.3"
 description = "CompassZha 人生仪表盘 · 主工程（阶段 1+）"
 edition = "2021"
 
@@ -27,3 +27,8 @@ keyring = { version = "3", features = ["windows-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 # v4.25 §2.13：数据一键导出（整包 data 目录为 zip；只开 deflate 压缩，最小依赖）
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# v4.26 §2.14：语料导入（epub/pdf → md，纯 Rust 无外部二进制依赖）
+epub-parser = "0.3"
+pdf_oxide = "0.3"
+# v4.26 修正：文件对话框改用 Tauri 官方插件（rfd 在 async 命令线程里 Windows 对话框弹不出/静默返回空）
+tauri-plugin-dialog = "2"
