@@ -20,6 +20,25 @@
 
 ---
 
+## 2026-10-17 10:01 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「把便携版的 release 做的干净一些，请让便携包只留 exe + portable.txt + 说明.txt，让程序首次启动自己生成全部 data」
+
+**做了什么：**
+- 先做真实运行验证（改动成立的前提）：临时目录只放 `exe` + `portable.txt`，启动 10 秒后 `data/` 自动生成完整骨架
+- 删除 `安装包\CompassZha便携版\data\`，并把同型交付副本 `release版本\CompassZha\data\` 一并清理，两个交付位收敛一致
+- 重打 zip（3,825,430 bytes，MD5 `7EE0D80E…`），包内仅 3 个条目；`gh release upload --clobber` 覆盖 v0.2.2 资产，下载回验 MD5 完全一致
+
+**关键发现：**
+- （实测）`bootstrap()` 首启幂等生成全部 data 骨架：5 个子目录 + config.json + README.md + .gitignore + 当日日记模板。代码见 `fs_cmds.rs` 的 `bootstrap()`（约 129–185 行）
+- （实测）无 `portable.txt` 时数据落 `%APPDATA%\CompassZha`；故便携形态**必须随包分发 portable.txt**，否则不是"解压即用"
+- （实测）`Compress-Archive -Path <文件夹>` 会在包内保留顶层文件夹名（`CompassZha便携版/…`），用户解压得到一个完整目录，优于散落条目
+
+**留下的问题 / 下一步：**
+- 【待办·用户已提】NSIS 安装向导（选安装位置、默认 D 盘、安装前展示 MIT 授权页、左侧 164×314 BMP 海报）：唯一阻塞是缺 `nsis_tauri_utils.dll`；海报原图用户已给出（512×1082，需转 BMP）。待用户确认三项决策后另开方案文档，遵循「先文档后代码」
+
+**涉及文件：** `安装包\CompassZha便携版\`（删 data）；`安装包\CompassZha_v0.2.2_portable_win64.zip`（重打+上传）；`release版本\CompassZha\`（删 data）；GitHub Release v0.2.2 资产（覆盖）
+
+---
+
 ## 2026-10-17 09:50 | GLM-5.3 (Trae Agent) | 任务来源：用户「现在又有这个报错了…整个软件现在都打不开了」→「执行吧」→「要让陌生用户下了之后能直接用」
 
 **做了什么：**
