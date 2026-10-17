@@ -20,7 +20,28 @@
 
 ---
 
-## 2026-10-17 08:54 | GLM-5.3 (Trae Agent) | 任务来源：用户「工作目录太乱了，找错测试 exe 版本；整理整个工作空间为五区结构；把安装包弄完放 安装包\」
+## 2026-10-17 09:13 | GLM-5.3 (Trae Agent) | 任务来源：用户「提交到 https://github.com/zhadao/CompassZha 这个库里，并且 release」
+
+**做了什么：**
+- 代码仓接 remote `zhadao/CompassZha`（远端已有昨日 v0.2.0/v0.2.1 开源门面版，两线历史无关）
+- `merge --allow-unrelated-histories -X ours` 吸收远端门面（LICENSE/README/CHANGELOG/docs），代码以本地最新为准；合并后清理：重删被复活的 StaticBadge.svelte、`git rm --cached release/CompassZha.exe`（远端历史遗留二进制，.gitignore 已有 release/ 规则）
+- 升版 **v0.2.2**（package.json/tauri.conf/Cargo.toml 三处），绕过 NSIS 直接 `npm run build`+`cargo build --release` 产新 exe（四方 MD5 `1C020370…`）
+- push `master:main`（`bf2b288..9219966`）+ tag `v0.2.2` + **GitHub Release 发布**：https://github.com/zhadao/CompassZha/releases/tag/v0.2.2（资产 `CompassZha_v0.2.2_portable_win64.zip` 2.24MB）
+
+**关键发现：**
+- （实测）当前网络**直连 github.com:443 不通**，但 **17890 mixed 代理活着**（HTTP 200）；push/大下载应走 `-c http.proxy=http://127.0.0.1:17890`；全局 https.proxy=7897 仍死，建议用户清理 git 全局代理
+- （实测）merge 无关历史时，本地已删除的文件会被远端复活（-X ours 只保内容冲突），删过的文件需重新删
+- （实测）vite+cargo 两步直构可产出与 tauri build 等价的 exe，绕开 NSIS DLL 卡点
+
+**留下的问题 / 下一步：**
+- 【待办】NSIS 安装器补制：工具链走 17890 代理下载 `nsis_tauri_utils.dll` 后重跑 `npm run tauri build`，成功可补 `*-setup.exe` 至 v0.2.2 Release 资产
+- 【建议】用户清理 git 全局代理死配置：`git config --global --unset http.proxy; git config --global --unset https.proxy`（当前已用 -c 单次覆盖绕过）
+
+**涉及文件：** `项目文件\主工程compass\`（三处版本号、Cargo.lock、StaticBadge 重删、release exe 解跟踪）；根/主工程双日志；GitHub `zhadao/CompassZha`（main 推至 `9219966`+日志提交、tag v0.2.2、Release 发布）
+
+---
+
+## 2026-10-17 16:5x | GLM-5.3 (Trae Agent) | 任务来源：用户「工作目录太乱了，找错测试 exe 版本；整理整个工作空间为五区结构；把安装包弄完放 安装包\」
 
 **做了什么：**
 - 需求文档升 **v4.23**（新增 §4.8 工作空间五区结构规范），双副本 MD5 一致（`94F15CF1…`）
