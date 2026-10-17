@@ -38,6 +38,8 @@ pub fn run() {
             fs_cmds::fs_exists,
             fs_cmds::fs_rename,
             fs_cmds::fs_reveal,
+            fs_cmds::export_data_zip,
+            fs_cmds::reveal_path,
             fs_cmds::git_auto_commit,
             git_sync::git_sync_get_config,
             git_sync::git_sync_set_config,

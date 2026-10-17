@@ -419,6 +419,109 @@ pub(crate) fn run_git(root: &Path, args: &[&str]) -> Result<(), String> {
     }
 }
 
+/* ---- 数据一键导出（v4.25 §2.13：整个数据根 → 「下载」文件夹 zip） ---- */
+
+/// SystemTime → zip 条目的 MS-DOS 时间戳（手拼公历换算，避免引入 time 依赖；
+/// MS-DOS 时间下限 1980 年，更早的 mtime 钳制到 1980-01-01）。
+fn zipped_time(t: std::time::SystemTime) -> zip::DateTime {
+    let secs = t
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = secs / 86_400;
+    let tod = (secs % 86_400) as u32;
+    // Howard Hinnant civil_from_days：UNIX 天数 → 公历 (y, m, d)
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = (if m <= 2 { y + 1 } else { y }) as i32;
+    zip::DateTime::from_date_and_time(
+        y.clamp(1980, 2107) as u16,
+        m as u8,
+        d as u8,
+        (tod / 3600) as u8,
+        ((tod % 3600) / 60) as u8,
+        (tod % 60) as u8,
+    )
+    .unwrap_or_default()
+}
+
+/// 递归把 dir 下所有条目写入 zip（目录/文件条目均带 `data/` 顶层前缀，
+/// 解压后即得完整 data 目录；同目录内按名称排序，产物可复现）。
+fn zip_tree(
+    w: &mut zip::ZipWriter<std::fs::File>,
+    opts: zip::write::SimpleFileOptions,
+    base: &Path,
+    dir: &Path,
+) -> Result<(), String> {
+    let mut entries: Vec<fs::DirEntry> = fs::read_dir(dir)
+        .map_err(|e| format!("读目录失败 {}：{e}", dir.display()))?
+        .filter_map(|e| e.ok())
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let p = entry.path();
+        let rel = p.strip_prefix(base).map_err(|e| format!("相对化失败：{e}"))?;
+        let name = format!("data/{}", rel.to_string_lossy().replace('\\', "/"));
+        if p.is_dir() {
+            w.add_directory(&name, opts)
+                .map_err(|e| format!("写入目录条目 {name} 失败：{e}"))?;
+            zip_tree(w, opts, base, &p)?;
+        } else if p.is_file() {
+            let mtime = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            let opts = opts.last_modified_time(zipped_time(mtime));
+            let mut f =
+                fs::File::open(&p).map_err(|e| format!("打开 {} 失败：{e}", p.display()))?;
+            w.start_file(&name, opts)
+                .map_err(|e| format!("写入条目 {name} 失败：{e}"))?;
+            std::io::copy(&mut f, w).map_err(|e| format!("压缩写入 {name} 失败：{e}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// 一键导出：把整个数据根目录打包为单个 zip，落到「下载」文件夹。
+/// `stamp` 由前端生成（`yyyy-mm-dd_hh-mm`），服务端再过滤一次非法字符防路径注入。
+/// 返回 zip 完整路径（前端展示 + 「打开所在文件夹」用）。
+#[tauri::command(async)]
+pub fn export_data_zip(stamp: String) -> Result<String, String> {
+    let root = data_root();
+    if !root.is_dir() {
+        return Err(format!("数据目录不存在：{}", root.display()));
+    }
+    let safe: String = stamp
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '-' || *c == '_')
+        .collect();
+    if safe.is_empty() {
+        return Err("时间戳非法，导出取消".to_string());
+    }
+    let downloads = std::env::var_os("USERPROFILE")
+        .map(|h| PathBuf::from(h).join("Downloads"))
+        .ok_or("无法定位「下载」文件夹")?;
+    fs::create_dir_all(&downloads).map_err(|e| format!("「下载」文件夹创建失败：{e}"))?;
+    let out_path = downloads.join(format!("CompassZha数据备份_{safe}.zip"));
+    let file = fs::File::create(&out_path).map_err(|e| format!("创建 zip 失败：{e}"))?;
+    let mut writer = zip::ZipWriter::new(file);
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .large_file(false);
+    zip_tree(&mut writer, opts, &root, &root)?;
+    writer
+        .finish()
+        .map_err(|e| format!("收尾 zip 失败：{e}"))?;
+    Ok(out_path.display().to_string())
+}
+
 /* ---- 资源管理器定位（v4.20：文件树右键「定位文件位置」，§2.9） ---- */
 
 /// 在资源管理器中定位并选中 dataRoot 下的文件（explorer /select,<绝对路径>）。
@@ -441,6 +544,30 @@ pub fn fs_reveal(rel: String) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         let _ = path;
+        Err("仅支持 Windows".into())
+    }
+}
+
+/// 在资源管理器中定位**任意绝对路径**的文件（v4.25 §2.13：导出结果「打开所在文件夹」；
+/// 与 fs_reveal 的区别——不限于 dataRoot 相对路径，仅定位、不做任何写操作）。
+#[tauri::command(async)]
+pub fn reveal_path(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("路径不存在".to_string());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{}", p.display()))
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(|e| format!("打开资源管理器失败：{e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = p;
         Err("仅支持 Windows".into())
     }
 }

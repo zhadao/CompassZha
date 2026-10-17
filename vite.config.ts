@@ -5,6 +5,11 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default defineConfig({
   plugins: [svelte()],
   clearScreen: false,
+  // v4.25 修复：显式清空 outDir——曾出现 dist 残留多代构建产物未被清理，
+  // Tauri 全量嵌入导致 exe 逐次膨胀（每代约 +1MB）
+  build: {
+    emptyOutDir: true,
+  },
   server: {
     port: 1420,
     strictPort: true,

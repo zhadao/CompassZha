@@ -73,14 +73,16 @@
     cursor: pointer;
   }
 
+  /* v4.25：确认按钮改全站主按钮语义色（随主题色联动；深色模式对比达标） */
   .btn.confirm {
-    background-color: var(--color-danger);
-    border-color: var(--color-danger);
-    color: #fff;
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-contrast);
   }
 
   .btn.confirm:hover {
-    filter: brightness(1.08);
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
   }
 
   .btn.ghost {

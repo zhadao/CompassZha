@@ -20,6 +20,56 @@
 
 ---
 
+## 2026-10-17 19:40 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「部分右键的UI还是没有适配到这个用户所选择的颜色模式下」（附深色模式右键菜单截图，「删除」项仍固定粉色）
+
+**做了什么：**
+- 右键菜单主题化收尾（继 BoardDeleteDialog 后同族缺陷清零）：
+  - `ContextMenu.svelte`（公共右键菜单，文件树/板块/日历/隆对着陆页共用）：删除 `.danger` 专属固定粉规则，「删除」项与普通项统一随主题色 accent 联动（hover 左侧竖条 = `--color-primary`）；`danger` 语义标记保留供未来区分
+  - `DiaryCalendar.svelte`（今日页日历内置右键菜单）：删除 `.danger` 固定粉规则；`.danger.armed`（「确认删除该日记？」二次确认态）由固定粉底 + 硬编码白字改为 `--color-primary` 实底 + `--color-primary-contrast` 文字
+  - `ConfirmDialog.svelte`（右键「删除」后的通用二次确认弹窗，FileTree/CalendarPage/EventEditor 共用）：确认按钮由 `--color-danger` 实底 + 硬编码 `#fff` 改为全站主按钮语义色，hover 改 `--color-primary-hover`（替换 brightness 滤镜）
+  - `TaskGoalMenu.svelte`（任务关联板块菜单）核查：本就全量 tokens 化，无需改
+- **发现并修复 exe 逐次膨胀 bug**：`vite.config.ts` 显式加 `build.emptyOutDir: true`，并手工清空 dist 后重建——此前 dist 残留 3 代构建产物（10:16 / 19:22 / 19:32 三批，总量 11.7MB），Tauri 全量嵌入导致 exe 从 6.37MB → 7.60MB → 8.67MB 逐次膨胀（每多嵌一代 ≈ +1.07MB）
+- 交付：svelte-check 0 错 0 警；重建纯净 release（dist 4.5MB 单批，大 JS 包唯一 `index-VPRTNPZd.js` 2,759,641B）——exe 回落至 **6,530,048 bytes**（单批前端 + zip crate，合理体积）；铁律双验通过（「人生仪表盘」True / dev 标记 False）
+
+**关键发现：**
+- （实测）vite 6 默认 `emptyOutDir` 在本工程未生效（三代 dist 共存实证），显式配置后才清空；**任何 exe 体积异常增长先查 dist 残留**
+- （实测）dist 每多嵌一代构建产物，exe 约 +1.07MB（前端资源压缩后体积）
+- （核实）右键菜单固定粉色的三处源头已全部改为 accent 语义色，`--color-danger` 仅保留给错误提示文案（`.feedback.err` 等），不再用于任何操作按钮/菜单项
+
+**留下的问题 / 下一步：**
+- 【待用户】实测右键菜单与二次确认弹窗（删除项现在随主题色；「确认删除」态为主题色实底）
+- 【待用户决策】GitHub Release v0.2.2 资产与 README 装修改动是否更新提交（本轮产物 MD5：exe `ABF46DBF…`，setup `AE4BEB0E…`）
+
+**涉及文件：** `src\components\common\ContextMenu.svelte`；`src\components\today\DiaryCalendar.svelte`；`src\components\common\ConfirmDialog.svelte`；`vite.config.ts`（emptyOutDir）；`安装包\CompassZha便携版\CompassZha.exe`；`release版本\CompassZha\CompassZha.exe`；`安装包\CompassZha_0.2.2_x64-setup.exe`；`安装包\CompassZha_v0.2.2_portable_win64.zip`
+
+---
+
+
+## 2026-10-17 19:26 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「优化一个特别小的UI缺陷：人生板块……保留数据……深色模式应该显示为黑色字体……一直是粉色状态；增加一个让用户导出数据的选项……导出总数据……告知用户该 zip 文件的保存路径；concern：测试版本里的数据根目录在分发出去的时候会保留吗？」
+
+**做了什么：**
+- 文档先行：需求文档升 **v4.25**——变更摘要新增「删除板块弹窗主题色修复」与「数据一键导出」，正文插入 **§2.13 数据一键导出**（六条功能点），双副本 Copy-Item 同步后 MD5 一致（`91AAEADF…`）
+- 弹窗修复：`BoardDeleteDialog.svelte` 两个操作按钮弃用固定 `--color-danger`（不随主题）+ 硬编码 `#ffffff`（深色粉底白字对比不足），改为全站主按钮语义色 `--color-primary` / `--color-primary-contrast`（hover 用 `-hover` / `-light`）——实测深色模式 `--accent-on` 为近黑（红主题 `#191314`），粉底黑字对比达标；四主题色全部联动
+- 导出功能 Rust 侧：`fs_cmds.rs` 新增 `export_data_zip(stamp)`（walkdir 式递归 + zip 2.6.1 逐文件 Deflated 流式压缩，条目顶层 `data/` 前缀，含 `.git`/`.backup`，mtime 手拼公历换算写入 MS-DOS 时间戳，落 `%USERPROFILE%\Downloads\CompassZha数据备份_YYYY-MM-DD_HH-mm.zip`）+ `reveal_path`（定位任意绝对路径）；`lib.rs` 注册；`Cargo.toml` 加 `zip = { version = "2", default-features = false, features = ["deflate"] }`（最小依赖，仅拉 4 包）
+- 导出功能前端侧：`tauri-fs.ts` 加 `exportStamp()`（本地时间 yyyy-mm-dd_hh-mm）/`exportDataZip()`/`revealPath()` 包装；`SettingsPage.svelte` 数据区操作行右端加「导出总数据」按钮（`push-right` 右对齐，busy 态文案「正在打包…」），成功反馈条含 zip 完整路径 + 行内「打开所在文件夹」文字按钮（`.link-btn`）
+- 验证与交付：svelte-check 0 错 0 警；cargo check 通过；临时单元测试 2/2 通过（时间戳换算 2026-10-17 12:34:56 UTC 逐字段断言、临时目录打包回读 data/ 前缀与中文内容）后删除；`npm run tauri build`（非沙箱，走 17890 代理）重建 release——exe 内搜「人生仪表盘」True、搜 `rustc-cfg=dev` False（铁律双验通过）
+
+**关键发现：**
+- （实测）zip crate 只开 deflate 特性时新增依赖极小（arbitrary/derive_arbitrary/zopfli/zip 共 4 包），exe 从 6,373,376 → 7,603,200 bytes（+1.2MB）
+- （实测）`zip::DateTime::from_date_and_time` 需 MS-DOS 时间域（1980–2107），早于 1980 的 mtime 必须钳制否则返回 Err（已用 `clamp(1980, 2107)` 处理）
+- （核实）分发物不含测试数据：便携 zip 仅 exe + portable.txt + 说明.txt；安装器 POSTINSTALL 钩子写 portable.txt → 首启自动在 exe 同级生成全新空 data 目录；本地 `安装包\CompassZha便携版\data`、`release版本\CompassZha\data` 只存在测试机
+- （实测）新版 exe（MD5 `1A44E7FF5AB213CF38D2E21F28D2AFD7`）已更新三处测试位：`安装包\CompassZha便携版\`、`release版本\CompassZha\`（exe 均 7,603,200 bytes，data/portable.txt 原样保留）；setup.exe 重编（MD5 `10F762DEE18CCFEC0FD0267EF68B53A0`，4,567,482 bytes）落位 `安装包\`；便携 zip 重压缩
+
+**留下的问题 / 下一步：**
+- 【待用户】实测两项：深色模式删除板块弹窗（应随主题色变色、粉底黑字）；设置-数据-「导出总数据」（下载文件夹应出现 zip，路径反馈 + 打开所在文件夹）
+- 【待用户决策】GitHub Release v0.2.2 资产（setup.exe / 便携 zip）与 README 装修改动（README.md + assets/ 未提交）是否随本次一起更新提交
+- 【可选·旧】数据仓 `zhadao/compasstext` 47 提交未推送；git 全局 `https.proxy` 仍指死端口 7897
+
+**涉及文件：** `CompassZha-总需求文档-v4.0.md`（升 v4.25 + §2.13，双副本同步）；`src\components\life\BoardDeleteDialog.svelte`；`src\lib\tauri-fs.ts`；`src\components\settings\SettingsPage.svelte`；`src-tauri\src\fs_cmds.rs`；`src-tauri\src\lib.rs`；`src-tauri\Cargo.toml`；`安装包\CompassZha便携版\CompassZha.exe`；`release版本\CompassZha\CompassZha.exe`；`安装包\CompassZha_0.2.2_x64-setup.exe`；`安装包\CompassZha_v0.2.2_portable_win64.zip`
+
+---
+
+
 ## 2026-10-17 10:26 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「NSIS 那条路现在卡在缺 `nsis_tauri_utils.dll`，得先试着补上（代理现在是通的）这个试着补上，把安装程序做出来」
 
 **做了什么：**

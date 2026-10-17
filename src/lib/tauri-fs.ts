@@ -133,3 +133,19 @@ export const appExit = (): Promise<void> => invoke<void>("app_exit");
 /** 隐藏主窗口到系统托盘（进程驻留，会话不丢） */
 export const hideToTray = (): Promise<void> => invoke<void>("hide_to_tray");
 
+/* ---- 数据一键导出（v4.25 §2.13） ---- */
+
+/** 导出文件名时间戳：yyyy-mm-dd_hh-mm（本地时间；服务端再过滤非法字符） */
+export function exportStamp(now = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}-${p(now.getMinutes())}`;
+}
+
+/** 一键导出：整个数据根打包为 zip 落「下载」文件夹，返回 zip 完整路径 */
+export const exportDataZip = (stamp: string): Promise<string> =>
+  invoke<string>("export_data_zip", { stamp });
+
+/** 在资源管理器中定位任意绝对路径文件（导出结果「打开所在文件夹」） */
+export const revealPath = (path: string): Promise<void> =>
+  invoke<void>("reveal_path", { path });
+

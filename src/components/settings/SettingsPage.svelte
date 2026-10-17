@@ -15,6 +15,9 @@
     closeBehaviorGet,
     closeBehaviorSet,
     persist,
+    exportDataZip,
+    exportStamp,
+    revealPath,
     type CloseBehavior,
     type GitSyncConfig,
   } from "../../lib/tauri-fs";
@@ -45,6 +48,9 @@
   let feedbackErr = false;
   let dirMsg = "";
   let dirErr = false;
+  /** v4.25 §2.13：导出总数据（整个数据根 → 「下载」文件夹 zip） */
+  let exporting = false;
+  let exportPath = "";
   /** v4.22 §2.11-B：关闭窗口行为（ask=每次询问 / exit=退出 / tray=托盘驻留） */
   let closeBehavior: CloseBehavior = "ask";
 
@@ -130,6 +136,31 @@
     } catch (e) {
       dirMsg = `打开失败：${e}`;
       dirErr = true;
+    }
+  }
+
+  /** v4.25 §2.13：一键导出整个数据根为 zip 到「下载」文件夹。 */
+  async function exportZip() {
+    exporting = true;
+    exportPath = "";
+    dirMsg = "";
+    dirErr = false;
+    try {
+      exportPath = await exportDataZip(exportStamp());
+      dirMsg = `已导出：${exportPath}`;
+    } catch (e) {
+      dirMsg = `导出失败：${e}`;
+      dirErr = true;
+    }
+    exporting = false;
+  }
+
+  /** 导出反馈中的「打开所在文件夹」：资源管理器定位选中该 zip。 */
+  async function revealZip() {
+    try {
+      await revealPath(exportPath);
+    } catch {
+      // 打开失败静默
     }
   }
 
@@ -260,10 +291,19 @@
         <Icon name="file" size={21} />
         打开数据目录
       </button>
+      <!-- v4.25 §2.13：右下角「导出总数据」——整个 data 文件夹一键打包为 zip -->
+      <button class="btn-secondary push-right" onclick={exportZip} disabled={!persist || exporting}>
+        {exporting ? "正在打包…" : "导出总数据"}
+      </button>
     </div>
 
     {#if dirMsg}
-      <p class="feedback" class:err={dirErr}>{dirMsg}</p>
+      <p class="feedback" class:err={dirErr}>
+        {dirMsg}
+        {#if exportPath}
+          <button class="link-btn" onclick={revealZip}>打开所在文件夹</button>
+        {/if}
+      </p>
     {/if}
   </section>
 
@@ -459,6 +499,23 @@
 
   .feedback.err {
     color: var(--color-danger);
+  }
+
+  /* v4.25：数据区操作行右端「导出总数据」（右下角入口） */
+  .push-right {
+    margin-left: auto;
+  }
+
+  /* v4.25：导出反馈行内「打开所在文件夹」文字按钮 */
+  .link-btn {
+    margin-left: var(--space-2);
+    padding: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
   }
 
   .author-corner {

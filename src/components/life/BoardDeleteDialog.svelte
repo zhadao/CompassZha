@@ -30,8 +30,8 @@
       是否保留<b>板块历史数据</b>？（热力图数据：每天被任务关联的次数）
     </p>
     <div class="dialog-actions">
-      <button class="btn danger solid" onclick={() => del(true)}>保留历史数据并删除</button>
-      <button class="btn danger" onclick={() => del(false)}>不保留，全部清除</button>
+      <button class="btn primary solid" onclick={() => del(true)}>保留历史数据并删除</button>
+      <button class="btn primary" onclick={() => del(false)}>不保留，全部清除</button>
       <button class="btn ghost" onclick={onCancel}>取消</button>
     </div>
     <p class="dialog-hint">
@@ -93,17 +93,22 @@
   .btn:hover {
     background: var(--color-surface-alt);
   }
-  .btn.danger {
-    color: var(--color-danger);
-    border-color: var(--color-danger);
+  /* v4.25：删除确认操作改用全站主按钮语义色（随主题色联动；
+     深色模式 --color-primary-contrast 为近黑，粉底黑字对比达标） */
+  .btn.primary {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
   }
-  .btn.danger.solid {
-    background: var(--color-danger);
-    border-color: var(--color-danger);
-    color: #ffffff;
+  .btn.primary:hover {
+    background: var(--color-primary-light);
   }
-  .btn.danger.solid:hover {
-    opacity: 0.9;
+  .btn.primary.solid {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-contrast);
+  }
+  .btn.primary.solid:hover {
+    background: var(--color-primary-hover);
   }
   .btn.ghost {
     margin-left: auto;

@@ -122,11 +122,6 @@
     background-color: var(--color-primary);
   }
 
-  .ctx-menu button.danger {
-    color: var(--color-danger);
-  }
-
-  .ctx-menu button.danger:hover::before {
-    background-color: var(--color-danger);
-  }
+  /* v4.25：danger 项不再用固定粉色 --color-danger，统一随主题色 accent 联动
+     （样式与普通项一致，仅保留 danger 语义标记供未来区分） */
 </style>

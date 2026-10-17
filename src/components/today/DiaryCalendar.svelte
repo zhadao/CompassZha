@@ -365,16 +365,10 @@
     opacity: 1;
   }
 
-  .ctx-menu button.danger {
-    color: var(--color-danger);
-  }
-
-  .ctx-menu button.danger::before {
-    background: var(--color-danger);
-  }
-
+  /* v4.25：danger 项不再用固定粉色 --color-danger，统一随主题色 accent 联动；
+     armed（二次确认态）改主题色实底 + 对比色文字（替换硬编码白色） */
   .ctx-menu button.danger.armed {
-    background-color: var(--color-danger);
-    color: #ffffff;
+    background-color: var(--color-primary);
+    color: var(--color-primary-contrast);
   }
 </style>
