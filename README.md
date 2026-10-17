@@ -185,7 +185,7 @@
 
 ### 方式一：直接安装（推荐普通用户）
 
-当前最新版本 **v0.2.6**（变更明细见 [CHANGELOG.md](CHANGELOG.md)）。
+当前最新版本 **v0.2.7**（变更明细见 [CHANGELOG.md](CHANGELOG.md)）。
 前往 [**Releases**](https://github.com/zhadao/CompassZha/releases/latest) 下载，两种形态任选：
 
 | 下载文件 | 形态 | 说明 |
