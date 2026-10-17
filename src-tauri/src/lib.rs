@@ -48,6 +48,8 @@ pub fn run() {
             git_sync::git_sync_get_config,
             git_sync::git_sync_set_config,
             git_sync::git_sync_now,
+            git_sync::git_sync_on_start,
+            git_sync::git_sync_tick,
             corpus_search::corpus_search,
             ai_chat::ai_get_config,
             ai_chat::ai_set_config,

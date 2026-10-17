@@ -27,8 +27,8 @@
     <div class="panel-body">
       <p class="lead">
         CompassZha 是一个本地软件，它<b>不内置任何账号、密钥或仓库地址</b>。想让数据同步到自己的
-        GitHub、让 AI 读你的笔记，需要你自己准备两样东西：一个<b>私密仓库</b>（配访问令牌）和一个
-        <b>AI API Key</b>。下面按顺序照做即可。
+        GitHub 或 Gitee、让 AI 读你的笔记，需要你自己准备两样东西：一个<b>私密仓库</b>（配访问令牌）
+        和一个<b>AI API Key</b>。下面按顺序照做即可。
       </p>
 
       <section>
@@ -51,7 +51,22 @@
       </section>
 
       <section>
-        <h3>② 创建访问令牌（PAT）</h3>
+        <h3>①′ 改用 Gitee？创建 Gitee 私密仓库</h3>
+        <ol>
+          <li>登录 Gitee，右上角 <b>+</b> → <b>新建仓库</b>。</li>
+          <li>填写仓库名，权限选 <b>私有</b>；不要勾选「初始化仓库」（保持空仓库）。</li>
+          <li>
+            创建后复制仓库地址，形如 <code>https://gitee.com/你的用户名/仓库名.git</code>。
+          </li>
+        </ol>
+        <p class="tip">
+          设置页的「同步平台」选 <b>Gitee</b> 时，仓库地址的<b>第一段必须是你的 Gitee 用户名</b>
+          （Gitee 的 HTTPS 认证需要用户名 + 私人令牌）。建在<b>组织</b>下的仓库暂不支持。
+        </p>
+      </section>
+
+      <section>
+        <h3>② 创建访问令牌（PAT / 私人令牌）</h3>
         <ol>
           <li>GitHub 右上角头像 → <b>Settings</b>。</li>
           <li>左侧栏拉到最底部 → <b>Developer settings</b>。</li>
@@ -69,63 +84,89 @@
           </li>
         </ol>
         <p class="tip">
-          令牌相当于你的账号密码，不要发给任何人、不要贴到聊天或文档里。若怀疑泄漏，回到同一页面
+          GitHub 令牌相当于你的账号密码，不要发给任何人、不要贴到聊天或文档里。若怀疑泄漏，回到同一页面
           Revoke（吊销）后重新生成即可。
+        </p>
+        <p class="tip">
+          <b>Gitee 私人令牌</b>：打开 <code>https://gitee.com/profile/personal_access_tokens</code>
+          （或头像 → 设置 → 安全设置 → 私人令牌），点「生成新令牌」，勾选 <code>projects</code> 权限，
+          生成后<b>只显示一次</b>，请立即复制保存。Gitee 已弃用账号密码推送，<b>必须用私人令牌替代密码</b>。
+        </p>
+        <p class="tip">
+          设置页令牌框旁的「<b>获取令牌</b>」按钮会按当前选择的平台，直接用浏览器打开对应的令牌生成页
+          （GitHub 已预勾 <code>repo</code> 权限）。
         </p>
       </section>
 
       <section>
-        <h3>③ 在设置页填写（本页下方表单）</h3>
+        <h3>③ 在设置页填写</h3>
         <table>
           <thead>
             <tr><th>字段</th><th>填什么</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td>开启自动同步</td>
-              <td>想让每次保存后自动上传就勾上；只手动同步可不勾</td>
+              <td>同步平台</td>
+              <td>GitHub 或 Gitee（决定令牌类型与认证方式）</td>
+            </tr>
+            <tr>
+              <td>同步时机</td>
+              <td>
+                「打开软件时同步」（默认开）／「每次保存后同步」／「定时同步（5/15/30/60 分钟）」
+                ——均按需勾选；也可随时点「立即同步」手动同步
+              </td>
             </tr>
             <tr>
               <td>仓库地址</td>
-              <td>第 ① 步复制的 <code>https://…​.git</code> 地址</td>
+              <td>第 ①（或 ①′）步复制的 <code>https://…​.git</code> 地址</td>
             </tr>
             <tr>
               <td>同步分支</td>
               <td>保持默认 <code>main</code> 即可</td>
             </tr>
             <tr>
-              <td>GitHub 访问令牌</td>
-              <td>第 ② 步生成的 <code>ghp_…</code> 令牌</td>
-            </tr>
-            <tr>
-              <td>数据目录</td>
-              <td>只读展示，无需填写</td>
+              <td>访问令牌</td>
+              <td>第 ② 步生成的 <code>ghp_…</code>（GitHub）或 Gitee 私人令牌</td>
             </tr>
           </tbody>
         </table>
         <p class="tip">
           先点 <b>保存配置</b>（令牌此时才写入系统凭据管理器），再点 <b>立即同步</b> 验证。同步成功后
-          回到 GitHub 仓库页面，就能看到你的笔记文件。
+          回到仓库页面，就能看到你的笔记文件。
+        </p>
+        <p class="tip">
+          <b>首次同步提示</b>：若远端仓库里已经有内容，软件会自动做一次<b>安全对齐</b>后重试——
+          只把远端历史接续为本地基线，<b>不会删除或改动你的任何数据文件</b>，也不会自动合并。
+          若同步仍失败，请确认令牌具备仓库读写权限（GitHub <code>repo</code> / Gitee <code>projects</code>）、
+          且网络能访问对应平台。
         </p>
       </section>
 
       <section>
-        <h3>④ 配置 AI（DeepSeek API Key）</h3>
+        <h3>④ 配置 AI（API Key）</h3>
         <ol>
           <li>
-            打开 <code>platform.deepseek.com</code>，注册并登录（新账号通常有免费额度）。
+            打开 <code>https://api-docs.deepseek.com/zh-cn/</code>（设置页 AI 区的
+            「<b>DeepSeek 开放平台</b>」按钮可直达），注册并登录（新账号通常有免费额度）。
           </li>
           <li>左侧菜单 <b>API keys</b> → <b>创建 API key</b>，命名随意。</li>
           <li>
             复制以 <code>sk-</code> 开头的密钥——同样<b>只显示一次</b>，请立即保存。
           </li>
-          <li>
-            回到本软件的设置页，填入 AI 配置区并保存（该表单随 AI 对话功能一同上线，届时本页会出现
-            「AI 配置」字段）。
-          </li>
+          <li>回到本软件的设置页，填入 AI 配置区并保存。</li>
         </ol>
         <p class="tip">
-          DeepSeek 按用量计费，费用从你账号的余额扣。密钥同样只存 Windows 凭据管理器，不写进任何文件。
+          DeepSeek <b>只是推荐默认</b>，并非唯一选择——凡兼容 OpenAI
+          <code>chat/completions</code> 协议的服务都能用：把「接口地址」与「模型」改成对应服务商的
+          即可。例如：月之暗面 Kimi（<code>https://api.moonshot.cn/v1</code>）、阿里云百炼·通义千问
+          （<code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>）、智谱 GLM
+          （<code>https://open.bigmodel.cn/api/paas/v4</code>）、硅基流动
+          （<code>https://api.siliconflow.cn/v1</code>）、OpenAI 官方
+          （<code>https://api.openai.com/v1</code>），以及 Ollama / LM Studio 等本地服务。
+          填写时以服务商文档给出的地址为准（多数需要带 <code>/v1</code>）。
+        </p>
+        <p class="tip">
+          DeepSeek 按用量计费，费用从你账号的余额扣。密钥只存 Windows 凭据管理器，不写进任何文件。
         </p>
       </section>
 
@@ -151,21 +192,29 @@
         <h3>⑥ 常见问题</h3>
         <ul>
           <li>
-            <b>提示「尚未保存令牌」</b>：先在上方令牌框粘贴 <code>ghp_…</code> 并点保存配置。
+            <b>提示「尚未保存令牌」</b>：先在设置页令牌框粘贴 <code>ghp_…</code>（或 Gitee 私人令牌）
+            并点保存配置。
           </li>
           <li>
-            <b>推送失败、提示权限或 403</b>：令牌权限不足或已过期——重新生成时务必勾选
-            <code>repo</code>。
+            <b>推送失败、提示权限或 403</b>：令牌权限不足或已过期——GitHub 重新生成时务必勾选
+            <code>repo</code>，Gitee 勾选 <code>projects</code>。
           </li>
           <li>
             <b>推送失败、提示找不到远端</b>：仓库地址写错，或分支名与实际不符（新建仓库默认
             <code>main</code>）。
           </li>
           <li>
+            <b>Gitee 认证失败</b>：确认仓库地址形如 <code>https://gitee.com/你的用户名/仓库名.git</code>
+            （第一段是你的 Gitee 用户名；组织仓库暂不支持），且令牌具备 <code>projects</code> 权限。
+          </li>
+          <li>
             <b>换电脑怎么继续用</b>：新电脑上用同一个私密库地址与令牌配置一次即可；若想直接拿回历史，
             可把数据目录指向从该库 clone 下来的文件夹。
           </li>
-          <li><b>不想同步了</b>：关掉「开启自动同步」开关，或点「清除已存令牌」。</li>
+          <li>
+            <b>不想自动同步了</b>：关掉「打开软件时同步」「每次保存后同步」并把「定时同步」设为关闭，
+            需要时再点「立即同步」；彻底不推送可点「清除已存令牌」。
+          </li>
         </ul>
       </section>
     </div>

@@ -1,7 +1,7 @@
 {
   "name": "compasszha",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "CompassZha 人生仪表盘 · 主工程（阶段 1+）",
   "type": "module",
   "scripts": {

@@ -3,14 +3,13 @@
   import SettingsHelp from "./SettingsHelp.svelte";
   import AuthorDialog from "./AuthorDialog.svelte";
   import AiConfigSection from "./AiConfigSection.svelte";
+  import GitSyncSection from "./GitSyncSection.svelte";
   import Segmented from "../common/Segmented.svelte";
   import Icon from "../common/Icon.svelte";
   import { appearance } from "../../stores/appearance.svelte";
   import type { AccentColor, ColorMode } from "../../lib/theme";
   import {
     gitSyncGetConfig,
-    gitSyncSetConfig,
-    gitSyncNow,
     openDataRoot,
     closeBehaviorGet,
     closeBehaviorSet,
@@ -19,7 +18,6 @@
     exportStamp,
     revealPath,
     type CloseBehavior,
-    type GitSyncConfig,
   } from "../../lib/tauri-fs";
 
   /** 主题色四色卡（0% 基础色，出自 color.md 色卡） */
@@ -31,21 +29,11 @@
   ];
 
   const purpose =
-    "配置你自己的 GitHub 私密仓同步与 AI（软件不内置任何账号、密钥或仓库地址）；点右上角「说明」查看完整配置步骤。";
+    "配置你自己的 GitHub / Gitee 私密仓同步与 AI（软件不内置任何账号、密钥或仓库地址）；点右上角「说明」查看完整配置步骤。";
 
-  let enabled = false;
   let helpOpen = false;
   let authorOpen = false;
-  let remote = "";
-  let branch = "main";
-  let token = "";
-  let tokenSaved = false;
-  let lastSync: number | null = null;
   let dataRoot = "";
-  let loaded = false;
-  let busy = false;
-  let feedback = "";
-  let feedbackErr = false;
   let dirMsg = "";
   let dirErr = false;
   /** v4.25 §2.13：导出总数据（整个数据根 → 「下载」文件夹 zip） */
@@ -54,78 +42,20 @@
   /** v4.22 §2.11-B：关闭窗口行为（ask=每次询问 / exit=退出 / tray=托盘驻留） */
   let closeBehavior: CloseBehavior = "ask";
 
-  const fmtTime = (secs: number | null): string =>
-    secs == null ? "从未同步" : new Date(secs * 1000).toLocaleString("zh-CN");
-
-  function applyCfg(cfg: GitSyncConfig) {
-    enabled = cfg.enabled;
-    remote = cfg.remote;
-    branch = cfg.branch;
-    tokenSaved = cfg.token_saved;
-    lastSync = cfg.last_sync;
-    dataRoot = cfg.data_root;
-  }
-
-  function notice(text: string, err = false) {
-    feedback = text;
-    feedbackErr = err;
-  }
-
   onMount(async () => {
     if (!persist) return; // 浏览器预览：无 Tauri 后端，显示预览提示
     try {
-      applyCfg(await gitSyncGetConfig());
+      dataRoot = (await gitSyncGetConfig()).data_root;
     } catch (e) {
-      notice(`读取配置失败：${e}`, true);
+      dirMsg = `读取数据目录失败：${e}`;
+      dirErr = true;
     }
     try {
       closeBehavior = await closeBehaviorGet();
     } catch {
       // 读取失败保持默认 ask
     }
-    loaded = true;
   });
-
-  /** 保存配置。令牌输入为空 → 传 null（保持已存 PAT 不动）。 */
-  async function save() {
-    busy = true;
-    try {
-      const t = token.trim();
-      await gitSyncSetConfig(enabled, remote, branch, t ? t : null);
-      token = "";
-      applyCfg(await gitSyncGetConfig());
-      notice("配置已保存");
-    } catch (e) {
-      notice(`${e}`, true);
-    }
-    busy = false;
-  }
-
-  /** 立即同步：本地提交 + 推送。 */
-  async function syncNow() {
-    busy = true;
-    try {
-      notice(await gitSyncNow());
-      applyCfg(await gitSyncGetConfig());
-    } catch (e) {
-      notice(`${e}`, true);
-    }
-    busy = false;
-  }
-
-  /** 清除已存令牌（传空串 = 清除密钥链条目）。 */
-  async function clearToken() {
-    busy = true;
-    try {
-      await gitSyncSetConfig(enabled, remote, branch, "");
-      token = "";
-      tokenSaved = false;
-      notice("令牌已从系统凭据管理器清除");
-    } catch (e) {
-      notice(`${e}`, true);
-    }
-    busy = false;
-  }
 
   /** v4.22 §3.1：在资源管理器中打开数据根目录。 */
   async function openDir() {
@@ -166,11 +96,13 @@
 
   /** v4.22 §2.11-B：切换关闭窗口行为（立即写 config.json）。 */
   async function setCloseBehavior(v: CloseBehavior) {
+    const prev = closeBehavior;
     closeBehavior = v;
     try {
       await closeBehaviorSet(v);
     } catch (e) {
-      notice(`${e}`, true);
+      closeBehavior = prev; // 写入失败回退显示，避免界面与配置不一致
+      console.warn("[settings] 写入关闭行为失败（已静默）", e);
     }
   }
 </script>
@@ -184,71 +116,9 @@
     </button>
   </div>
 
-  {#if !persist}
-    <div class="banner">
-      浏览器预览模式 —— GitHub 同步需在桌面应用内配置（配置步骤见右上角「说明」）
-    </div>
-  {:else if !loaded}
-    <div class="banner">正在读取配置…</div>
-  {:else}
-    <section class="card block">
-      <div class="block-head">
-        <h2 class="block-title">GitHub 私密仓同步</h2>
-        <span class="head-ico" title="数据同步到你自己的 GitHub 私密仓库">
-          <Icon name="github" size={24} />
-        </span>
-      </div>
+  <GitSyncSection />
 
-      <label class="switch-row">
-        <input type="checkbox" bind:checked={enabled} />
-        <span>开启自动同步（每次本地提交后自动推送到 GitHub）</span>
-      </label>
-
-      <label class="field">
-        <span class="label">仓库地址（GitHub 私密仓，https:// 开头）</span>
-        <input
-          type="text"
-          bind:value={remote}
-          placeholder="https://github.com/<用户名>/<仓库名>.git"
-        />
-      </label>
-
-      <label class="field">
-        <span class="label">同步分支</span>
-        <input type="text" bind:value={branch} placeholder="main" />
-      </label>
-
-      <label class="field">
-        <span class="label">GitHub 访问令牌（PAT）</span>
-        <input
-          type="password"
-          bind:value={token}
-          placeholder={tokenSaved
-            ? "已保存——输入新值可替换"
-            : "ghp_…（只存系统凭据管理器，不写任何文件）"}
-          autocomplete="off"
-        />
-      </label>
-      {#if tokenSaved}
-        <button class="btn-secondary clear-btn" onclick={clearToken} disabled={busy}>
-          清除已存令牌
-        </button>
-      {/if}
-
-      <p class="sync-status">上次同步：{fmtTime(lastSync)}</p>
-
-      <div class="actions">
-        <button class="btn-primary" onclick={save} disabled={busy}>保存配置</button>
-        <button class="btn-secondary" onclick={syncNow} disabled={busy}>立即同步</button>
-      </div>
-
-      {#if feedback}
-        <p class="feedback" class:err={feedbackErr}>{feedback}</p>
-      {/if}
-    </section>
-
-    <AiConfigSection />
-  {/if}
+  <AiConfigSection />
 
   <!-- 窗口（v4.22 §2.11-B）：关闭窗口行为 -->
   <section class="card block">
@@ -400,23 +270,11 @@
     margin: 0;
   }
 
-  .block-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
   .block-hint {
     font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
     line-height: 1.6;
     margin: 0;
-  }
-
-  .head-ico {
-    display: inline-flex;
-    /* v4.19：图标随 currentColor —— 浅色近黑 / 深色近白，保证 GitHub 标志深色下清晰 */
-    color: var(--color-text-primary);
   }
 
   .accent-row {
@@ -442,16 +300,6 @@
     outline-offset: 1px;
   }
 
-  .banner {
-    background-color: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    max-width: 560px;
-  }
-
   .switch-row {
     display: flex;
     align-items: center;
@@ -474,16 +322,6 @@
 
   .field input {
     width: 100%;
-  }
-
-  .clear-btn {
-    align-self: flex-start;
-  }
-
-  .sync-status {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-tertiary);
-    margin: 0;
   }
 
   .actions {

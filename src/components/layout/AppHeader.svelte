@@ -15,6 +15,11 @@
 
   let maximized = $state(false);
 
+  // v4.27 隐私加固：作者自用版标识文本经运行时表达式取值。
+  // 公开发布版构建期把 VITE_AUTHOR_BUILD 折叠为 "0"，本表达式被压缩器折叠为空串，
+  // 「author-ZHA」字面量连同条件分支一并摇树移除，不残留于公开包产物中。
+  const authorMark = import.meta.env.VITE_AUTHOR_BUILD === "1" ? "author-ZHA" : "";
+
   onMount(() => {
     const refresh = () => {
       void winIsMaximized().then((v) => (maximized = v));
@@ -28,8 +33,8 @@
 <header class="app-header" data-tauri-drag-region>
   <!-- v4.26 作者自用版标识：仅当构建期注入 VITE_AUTHOR_BUILD=1 时才渲染。
        默认（公开发布版）不进入产物——失败安全，避免作者标识混入公开包。 -->
-  {#if import.meta.env.VITE_AUTHOR_BUILD === "1"}
-    <span class="author-badge" aria-hidden="true">author-ZHA</span>
+  {#if authorMark}
+    <span class="author-badge" aria-hidden="true">{authorMark}</span>
   {/if}
   <!-- 拖拽填充区：整条留白区可拖动窗口 -->
   <div class="drag-fill"></div>

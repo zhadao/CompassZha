@@ -60,13 +60,22 @@ export function boardDefaultRel(boardName: string): string {
   return `life/${boardName}/${boardName}.md`;
 }
 
-/* ---- GitHub 私密仓同步（v4.10；PAT 只存系统凭据管理器，绝不回传前端） ---- */
+/* ---- GitHub / Gitee 私密仓同步（v4.10 起；v4.27 加平台与同步时机；令牌只存系统凭据管理器） ---- */
 
-/** git_sync_get_config 返回的同步配置（token_saved=true 表示密钥链已存 PAT） */
+/** 同步平台：github / gitee（v4.27） */
+export type GitPlatform = "github" | "gitee";
+
+/** git_sync_get_config 返回的同步配置（token_saved=true 表示密钥链已存令牌） */
 export interface GitSyncConfig {
-  enabled: boolean;
+  platform: GitPlatform;
   remote: string;
   branch: string;
+  /** 打开软件时对比变更并提交推送一次（v4.27 默认时机） */
+  on_start: boolean;
+  /** 每次保存后同步（v4.10 原默认行为，v4.27 起改为用户设置项，默认关） */
+  enabled: boolean;
+  /** 定时同步间隔（分钟，0 = 关闭；仅支持 5/15/30/60） */
+  interval_min: number;
   token_saved: boolean;
   last_sync: number | null;
   data_root: string;
@@ -79,15 +88,34 @@ export const gitSyncGetConfig = (): Promise<GitSyncConfig> =>
 /** 保存同步设置；token 语义：非空 = 写入密钥链 / 空串 = 清除 / null = 保持不动 */
 export const gitSyncSetConfig = (
   enabled: boolean,
+  platform: GitPlatform,
+  onStart: boolean,
+  intervalMin: number,
   remote: string,
   branch: string,
   token: string | null,
 ): Promise<void> =>
-  invoke<void>("git_sync_set_config", { enabled, remote, branch, token });
+  invoke<void>("git_sync_set_config", {
+    enabled,
+    platform,
+    onStart,
+    intervalMin,
+    remote,
+    branch,
+    token,
+  });
 
 /** 立即同步（本地提交 + 推送 + 记 last_sync） */
 export const gitSyncNow = (): Promise<string> =>
   invoke<string>("git_sync_now");
+
+/** 打开软件时同步（v4.27 默认时机）：未开启/未配置/无令牌 → "skipped" */
+export const gitSyncOnStart = (): Promise<string> =>
+  invoke<string>("git_sync_on_start");
+
+/** 定时同步一次（由前端调度器按 interval_min 触发） */
+export const gitSyncTick = (): Promise<string> =>
+  invoke<string>("git_sync_tick");
 
 /** 用系统默认浏览器打开 https 链接（v4.16：「软件作者」弹窗外链）。 */
 export const openUrlHttps = (url: string): Promise<void> =>

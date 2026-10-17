@@ -11,6 +11,39 @@
 
 ---
 
+## [0.2.4] - 2026-10-17
+
+同步策略重构 + GitHub/Gitee 双平台同步 + 令牌与 AI Key 直连指引。
+
+### 新增
+
+- **同步时机三选项**：默认改为「打开软件时对比本地变更并提交推送一次」；
+  「每次保存后同步」（原默认行为）与「定时同步（每 5/15/30/60 分钟）」改为用户设置项，默认关闭。
+  设置保留「立即同步」手动按钮，是唯一会把错误提示回显给你的入口。
+- **支持 Gitee 仓库同步**：设置页新增「同步平台」下拉（GitHub / Gitee），国内网络也能舒服同步。
+  Gitee 使用「用户名 + 私人令牌」认证（Gitee 已弃用账号密码，私人令牌替代密码）。
+- **「获取令牌」直连按钮**：GitHub / Gitee 令牌输入框旁一键用系统浏览器打开对应官方令牌生成页
+  （GitHub 已预勾 `repo` 权限）。
+- **「DeepSeek 开放平台」直连按钮**：AI 配置区一键打开 DeepSeek 开放平台文档；并明确说明
+  DeepSeek 只是推荐默认——凡兼容 OpenAI `chat/completions` 协议的服务都能用（Kimi / 通义千问 /
+  智谱 GLM / 硅基流动 / OpenAI 官方 / 本地 Ollama·LM Studio 等），并给出示例接口地址。
+
+### 变更
+
+- 同步配置区块从设置页拆出为独立组件 `GitSyncSection.svelte`（组件 ≤300 行规范）。
+- 推送与对齐的 git 子进程一律禁用终端凭据提示，认证失败立即返回而不是挂在等待输入上。
+
+### 修复
+
+- **首次同步不再必然失败**：远端私密库已有内容而本地数据目录尚无 git 仓库时，推送被拒后
+  自动做一次安全对齐（把远端历史接续为本地历史基线）并重试。对齐只移动仓库指针，
+  **不会删除或改动你的任何数据文件**，也不做自动合并。
+- **公开包不再残留作者标识**：`VITE_AUTHOR_BUILD` 改为构建期 `define` 折叠，公开发布版
+  产物中「author-ZHA」字面量与样式类名一并摇树移除（此前仅运行时不渲染，字面量仍在 JS 里）。
+  同时修正 `emptyOutDir` 未生效导致的 dist 残留——发布构建前先清空 `dist`，避免多代产物混入。
+
+---
+
 ## [0.2.3] - 2026-10-17
 
 ### 新增
@@ -149,7 +182,8 @@ API Key，数据仍只保存在本地 Markdown——软件不内置任何密钥�
 - 章节级「手术式写回」：只替换被修改的章节，用户手改内容字节级保留。
 - 全部业务数据以纯 Markdown 文件存储，无数据库、无专有格式，便于 AI 直接读取分析。
 
-[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.3...HEAD
+[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.4
 [0.2.3]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.3
 [0.2.2]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.2
 [0.2.1]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.1

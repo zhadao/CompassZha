@@ -24,13 +24,18 @@
     type CloseBehavior,
   } from "./lib/tauri-fs";
   import { onCloseRequested } from "./lib/win";
+  import { initSyncSchedule } from "./lib/git-sync-schedule";
 
   // 阶段 1：挂载即从真实文件装载数据（ensureToday + 近文件扫描 + 板块扫描）；
   // v4.17：外观偏好随后台配置装载（localStorage 快照已在 main.ts 预应用）；
   // v4.22：订阅 Rust 的 close-requested 事件 → 弹「关闭方式」Modal
+  // v4.27：数据装载完成后启动同步调度（打开软件时同步 + 定时同步，§2.15）
   onMount(() => {
     void appearance.init();
-    void app.loadAll();
+    void app
+      .loadAll()
+      .catch(() => {})
+      .then(() => void initSyncSchedule());
 
     let cancelled = false;
     let unlisten: (() => void) | null = null;
