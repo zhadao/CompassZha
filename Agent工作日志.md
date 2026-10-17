@@ -20,6 +20,30 @@
 
 ---
 
+## 2026-10-17 08:54 | GLM-5.3 (Trae Agent) | 任务来源：用户「工作目录太乱了，找错测试 exe 版本；整理整个工作空间为五区结构；把安装包弄完放 安装包\」
+
+**做了什么：**
+- 需求文档升 **v4.23**（新增 §4.8 工作空间五区结构规范），双副本 MD5 一致（`94F15CF1…`）
+- **安装包收束**：NSIS 单次非沙箱构建（清代理 env）——工具链重建成功、nsis-3.13.zip 下载解压 OK，唯 `nsis_tauri_utils.dll` 在 bundler 与 curl 两路均超时（GitHub 该 release 附件当前对本机不可达）→ 按用户授权**降级交付便携包**至 `安装包\CompassZha便携版\`，不循环重试
+- **活数据迁移**：corpus(1572)/daily/life/conversations/events/.git/config.json/.gitignore/README.md 从工作区根迁 `%APPDATA%\CompassZha`，`data_root` 清空回落默认；对账通过后删源；数据仓迁移提交 `c22e5ef`（含 logo.af~lock~ 清理）
+- **五区整理**：`release版本`（原便携最终发布版）、`项目文件\主工程compass`（21568 文件）、`美术资源`（14 项含 logo.af）、`过往开发和版本\{归档,开源发布,语料源}`；根目录终态九项
+- **代码仓存档**：主工程 88 项变更提交 `9c01669`（133 文件 +6292/-765），仅本地未推送
+
+**关键发现：**
+- （实测）NSIS 反复失败三因叠加：历史遗留几十个并发构建互踩工具链缓存 + 会话死代理 env（17890）+ 沙箱拦 GenPat.exe；单次非沙箱+清代理后工具链即重建成功，说明环境修法正确，仅剩 DLL 一个附件超时
+- （实测）Move-Item 对含 target\ 的巨型树会「内容移动成功但报权限错」，以文件数对账（源0/副本21568）为准，勿被报错误导
+- （实测）`Copy-Item` 不带 `-Recurse` 复制 .git 只会得到空壳目录
+- （实测）`颜色与美术资源` 存在句柄占用无法改名，用「移内容再删壳」策略绕过
+
+**留下的问题 / 下一步：**
+- 【待办】NSIS 安装器补制：网络可访问 `github.com/tauri-apps/nsis-tauri-utils` release 附件后，重跑 `npm run tauri build` 即可产出 setup.exe（工具链其余部分已就位于 `%LOCALAPPDATA%\tauri\NSIS`）
+- 【用户验收】测试入口：干净数据用 `release版本\CompassZha\CompassZha.exe`（便携形态）；看真实数据用 `项目文件\主工程compass\release\CompassZha.exe`（读 %APPDATA%\CompassZha，corpus 1572 已在位）
+- 【用户决定】数据仓/代码仓推送 GitHub 延后执行（代码仓无 remote；数据仓 remote 为 compasstext，git 全局代理死端口 7897 待清理）
+
+**涉及文件：** 根目录全量重排（五区+三文档+.trae）；`%APPDATA%\CompassZha\`（全量数据+数据仓）；`安装包\CompassZha便携版\`；需求文档双副本 v4.23；代码仓 HEAD=`9c01669`、数据仓 HEAD=`c22e5ef`
+
+---
+
 ## 2026-10-17 06:51 | GLM-5.3-FlashX (Trae Agent) | 任务来源：用户走查反馈「右键添加只在最上方一栏生效，要求日历视图任何地方（任何时间格、任何天的格子）右键都能唤出对应的新建/编辑/删除选单」
 
 **做了什么：**
