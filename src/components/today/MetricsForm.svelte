@@ -92,7 +92,8 @@
     </label>
     <label class="field">
       <span class="label">今日支出（元）</span>
-      <input type="number" step="1" min="0" bind:value={spendTotal} />
+      <!-- v4.32：支出精确到分（step=0.01），不再限制为整元 -->
+      <input type="number" step="0.01" min="0" bind:value={spendTotal} />
     </label>
     <div class="field">
       <span class="label">心情（1-5）</span>
@@ -114,7 +115,8 @@
     </div>
     <label class="field">
       <span class="label">运动步数</span>
-      <input type="number" step="500" min="0" bind:value={steps} />
+      <!-- v4.32：任意正整数（step=1），去掉原 500 的粒度限制 -->
+      <input type="number" step="1" min="0" bind:value={steps} />
     </label>
     <div class="actions">
       <button class="btn-primary" type="submit">写入今日</button>
