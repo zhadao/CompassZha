@@ -2,6 +2,7 @@
   // 数据同步区（v4.27 §2.15）：GitHub / Gitee 私密仓同步。
   // 从 SettingsPage.svelte 拆出，遵守 CODE-003（组件 ≤300 行）。
   // 令牌三态语义：输入非空 = 写入密钥链 / 「清除已存令牌」传空串 = 清除 / 保存时空输入 = null（保持不动）。
+  // v4.29：新增「认证方式」——auto（默认，交给本机 git，免输入）/ token（注入私人令牌）。
   import { onMount } from "svelte";
   import Icon from "../common/Icon.svelte";
   import {
@@ -11,8 +12,10 @@
     gitSyncNow,
     openUrlHttps,
     type GitPlatform,
+    type GitAuth,
   } from "../../lib/tauri-fs";
   import { refreshSyncSchedule } from "../../lib/git-sync-schedule";
+  import { manual } from "../../stores/manual.svelte";
 
   /** 令牌生成页（「获取令牌」按钮目标；GitHub 已预勾 repo 权限） */
   const TOKEN_URL: Record<GitPlatform, string> = {
@@ -24,6 +27,7 @@
   const INTERVALS: number[] = [0, 5, 15, 30, 60];
 
   let platform = $state<GitPlatform>("github");
+  let auth = $state<GitAuth>("auto");
   let onStart = $state(true);
   let enabled = $state(false);
   let intervalMin = $state(0);
@@ -38,6 +42,8 @@
   let feedbackErr = $state(false);
 
   const isGitee = $derived(platform === "gitee");
+  const isAuto = $derived(auth === "auto");
+  const hostLabel = $derived(isGitee ? "Gitee" : "GitHub");
   const remotePlaceholder = $derived(
     isGitee
       ? "https://gitee.com/<你的用户名>/<仓库名>.git"
@@ -63,6 +69,7 @@
   async function applyCfg() {
     const cfg = await gitSyncGetConfig();
     platform = cfg.platform;
+    auth = cfg.auth;
     onStart = cfg.on_start;
     enabled = cfg.enabled;
     intervalMin = cfg.interval_min;
@@ -97,7 +104,7 @@
     busy = true;
     try {
       const t = token.trim();
-      await gitSyncSetConfig(enabled, platform, onStart, intervalMin, remote, branch, t ? t : null);
+      await gitSyncSetConfig(enabled, platform, auth, onStart, intervalMin, remote, branch, t ? t : null);
       token = "";
       await applyCfg();
       await refreshSyncSchedule();
@@ -124,7 +131,7 @@
   async function clearToken() {
     busy = true;
     try {
-      await gitSyncSetConfig(enabled, platform, onStart, intervalMin, remote, branch, "");
+      await gitSyncSetConfig(enabled, platform, auth, onStart, intervalMin, remote, branch, "");
       token = "";
       tokenSaved = false;
       notice("令牌已从系统凭据管理器清除");
@@ -144,7 +151,7 @@
   </div>
 
   {#if !persist}
-    <p class="banner">浏览器预览模式 —— 数据同步需在桌面应用内配置（配置步骤见右上角「说明」）</p>
+    <p class="banner">浏览器预览模式 —— 数据同步需在桌面应用内配置（步骤见右上角「说明书」）</p>
   {:else if !loaded}
     <p class="banner">正在读取配置…</p>
   {:else}
@@ -159,10 +166,25 @@
       </select>
     </label>
 
+    <label class="field">
+      <span class="label">认证方式</span>
+      <select value={auth} onchange={(e) => (auth = e.currentTarget.value as GitAuth)}>
+        <option value="auto">自动（交给系统，免输入）</option>
+        <option value="token">私人令牌</option>
+      </select>
+    </label>
+
+    {#if isAuto}
+      <p class="sub-note">
+        自动：认证交给本机 git（https 走系统凭据管理器、SSH 走 ~/.ssh 密钥），无需令牌。
+        <button class="link-btn" onclick={() => manual.openManual()}>详见说明书</button>
+      </p>
+    {/if}
+
     <div class="sub-block">
       <h3 class="sub-title">同步时机</h3>
       <p class="sub-note">
-        默认只在「打开软件时」对比本地变更并提交推送一次；下面两项按需开启。三个时机都要求已填仓库地址并保存令牌。
+        默认仅「打开软件时」同步一次；下面两项按需开启。三者都需先填仓库地址{#if !isAuto}并保存令牌{/if}。
       </p>
       <label class="switch-row">
         <input type="checkbox" bind:checked={onStart} />
@@ -186,7 +208,7 @@
     </div>
 
     <label class="field">
-      <span class="label">仓库地址（{isGitee ? "Gitee" : "GitHub"} 私密仓，https:// 开头）</span>
+      <span class="label">仓库地址（{hostLabel} 私密仓，https:// 或 SSH 形式）</span>
       <input type="text" bind:value={remote} placeholder={remotePlaceholder} />
     </label>
 
@@ -195,19 +217,21 @@
       <input type="text" bind:value={branch} placeholder="main" />
     </label>
 
-    <label class="field">
-      <span class="label">{tokenLabel}</span>
-      <input type="password" bind:value={token} placeholder={tokenHint} autocomplete="off" />
-    </label>
+    {#if !isAuto}
+      <label class="field">
+        <span class="label">{tokenLabel}</span>
+        <input type="password" bind:value={token} placeholder={tokenHint} autocomplete="off" />
+      </label>
 
-    <div class="actions">
-      <button class="btn-secondary" onclick={() => void openTokenPage()}>获取令牌</button>
-      {#if tokenSaved}
-        <button class="btn-secondary" onclick={() => void clearToken()} disabled={busy}>
-          清除已存令牌
-        </button>
-      {/if}
-    </div>
+      <div class="actions">
+        <button class="btn-secondary" onclick={() => void openTokenPage()}>获取令牌</button>
+        {#if tokenSaved}
+          <button class="btn-secondary" onclick={() => void clearToken()} disabled={busy}>
+            清除已存令牌
+          </button>
+        {/if}
+      </div>
+    {/if}
 
     <p class="sync-status">上次同步：{fmtTime(lastSync)}</p>
 
@@ -324,5 +348,17 @@
     color: var(--color-text-tertiary);
     margin: 0;
     line-height: 1.6;
+  }
+
+  .link-btn {
+    padding: 0;
+    margin-left: var(--space-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    white-space: nowrap;
   }
 </style>

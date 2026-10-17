@@ -4,6 +4,9 @@
 // v4.17：外观偏好（appearance）。
 // v4.22：窗口生命周期（win_cmds）——关闭三段式 + 系统托盘驻留 + 打开数据目录。
 // v4.26：语料导入（corpus_import）——epub/pdf → md 落 corpus/imported/。
+// v4.31：单实例约束（single-instance）——同一时刻仅一个进程/窗口。
+use tauri::Manager;
+
 mod ai_chat;
 mod appearance;
 mod config_topics;
@@ -16,6 +19,15 @@ mod win_cmds;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // v4.31 §2.17：单实例约束——必须最先注册。重复启动时不新建进程/窗口，
+        // 而是唤回并聚焦已有主窗口（若在托盘中则重新显示）。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         // v4.26：官方文件对话框插件（语料转化的文件选择）
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {

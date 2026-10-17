@@ -2,6 +2,10 @@
   import { app } from "../../stores/app.svelte";
   import { METRIC_LABELS } from "../../mock/preview";
   import type { DailyMetrics } from "../../types/schema";
+  import Icon from "../common/Icon.svelte";
+
+  /** 心情档位 1-5（v4.31：以自绘 SVG 图标替换原 emoji 下拉） */
+  const MOODS = [1, 2, 3, 4, 5];
 
   // 录入表单：字段与 frontmatter 一一对应（UI-004：命名一致）
   let sleepHours = $state(toStr(app.note.metrics.sleep_hours));
@@ -90,17 +94,24 @@
       <span class="label">今日支出（元）</span>
       <input type="number" step="1" min="0" bind:value={spendTotal} />
     </label>
-    <label class="field">
+    <div class="field">
       <span class="label">心情（1-5）</span>
-      <select bind:value={mood}>
-        <option value="">未选择</option>
-        <option value="1">1 😞</option>
-        <option value="2">2😕</option>
-        <option value="3">3 😐</option>
-        <option value="4">4 🙂</option>
-        <option value="5">5 😄</option>
-      </select>
-    </label>
+      <div class="mood-row" role="group" aria-label="心情（1-5）">
+        {#each MOODS as m (m)}
+          <button
+            type="button"
+            class="mood-btn"
+            class:active={mood === String(m)}
+            aria-pressed={mood === String(m)}
+            aria-label={`心情 ${m}`}
+            title={`心情 ${m}（再次点击可清除）`}
+            onclick={() => (mood = mood === String(m) ? "" : String(m))}
+          >
+            <Icon name={`mood-${m}`} size={30} />
+          </button>
+        {/each}
+      </div>
+    </div>
     <label class="field">
       <span class="label">运动步数</span>
       <input type="number" step="500" min="0" bind:value={steps} />
@@ -156,9 +167,49 @@
     color: var(--color-text-tertiary);
   }
 
-  .field input,
-  .field select {
+  .field input {
     width: 100%;
+  }
+
+  /* v4.31：心情档位图标选择器（原 emoji 下拉的替代） */
+  .mood-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .mood-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    opacity: 0.4;
+    cursor: pointer;
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .mood-btn:hover {
+    opacity: 0.8;
+    background: var(--color-surface-alt);
+  }
+
+  .mood-btn.active {
+    opacity: 1;
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+
+  .mood-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring, var(--color-primary));
+    outline-offset: 2px;
   }
 
   .actions {

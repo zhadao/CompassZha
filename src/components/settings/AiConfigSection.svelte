@@ -6,6 +6,7 @@
   import { persist, openUrlHttps } from "../../lib/tauri-fs";
   import { aiGetConfig, aiSetConfig } from "../../lib/ai";
   import Icon from "../common/Icon.svelte";
+  import { manual } from "../../stores/manual.svelte";
 
   /** DeepSeek 开放平台文档（「DeepSeek 开放平台」按钮目标，v4.27 §2.15-D4） */
   const DEEPSEEK_DOCS = "https://api-docs.deepseek.com/zh-cn/";
@@ -140,22 +141,14 @@
       <input type="text" bind:value={baseUrl} />
     </label>
     <p class="sub-note">
-      接口地址／模型可自由修改——凡兼容 OpenAI chat/completions 协议的服务都能用。DeepSeek 只是推荐默认
-      （本软件默认值），此外如：月之暗面 Kimi（https://api.moonshot.cn/v1）、阿里云百炼·通义千问
-      （https://dashscope.aliyuncs.com/compatible-mode/v1）、智谱 GLM（https://open.bigmodel.cn/api/paas/v4）、
-      硅基流动（https://api.siliconflow.cn/v1）、OpenAI 官方（https://api.openai.com/v1），
-      以及 Ollama / LM Studio 等本地服务。填写时以服务商文档给的地址为准（多数需带 /v1）。
+      接口地址／模型可自由修改——凡兼容 OpenAI 协议的服务都能用（Kimi、百炼、智谱、硅基流动、OpenAI、本地 Ollama…）。
+      <button class="link-btn" onclick={() => manual.openManual()}>详见说明书</button>
     </p>
     {#if keySaved}
       <button class="btn-secondary clear-btn" onclick={() => void clearKey()} disabled={busy}>
         清除已存 Key
       </button>
     {/if}
-
-    <label class="field">
-      <span class="label">接口地址（一般无需改动）</span>
-      <input type="text" bind:value={baseUrl} />
-    </label>
 
     <label class="field">
       <span class="label">模型（一般无需改动）</span>
@@ -170,8 +163,7 @@
     <div class="sub-block">
       <h3 class="sub-title">数据分析 API（可选 · 仪表盘「AI 数据分析」用）</h3>
       <p class="sub-note">
-        建议单独再配一个 API，让数据分析对话与隆中对分开、各自提升 API 缓存命中率；
-        只有一个 API 时留空即可——自动与上方主 API 共用。
+        可单独再配一个 API，与隆中对分开、各提升缓存命中率；只有一个 API 时留空即与上方共用。
       </p>
       <label class="field">
         <span class="label">数据分析 API Key（只存系统凭据管理器）</span>

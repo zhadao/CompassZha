@@ -1,10 +1,15 @@
-// 数据同步（v4.10 前移执行，v4.27 扩为三时机 + GitHub/Gitee 双平台）：
-// - config.json 只存非敏感字段（platform / remote / branch / on_start / enabled / interval_min / last_sync）；
-// - 令牌只存 Windows 凭据管理器（keyring，SPEC-012），绝不写入任何文件或仓库；
-// - 推送/拉取时经 `git -c http.extraheader=...` 一次性注入（不落盘、不进 .git/config），
-//   且一律设 GIT_TERMINAL_PROMPT=0——认证失败立即返回，不挂在凭据输入提示上；
-// - 认证方式：github = `x-access-token:<token>`；gitee = `<仓库地址第一段(用户名)>:<token>`
-//   （Gitee 已弃用账号密码，私人令牌替代密码）；
+// 数据同步（v4.10 前移执行，v4.27 扩为三时机 + GitHub/Gitee 双平台，v4.29 认证方式交还 git）：
+// - config.json 只存非敏感字段
+//   （platform / auth / remote / branch / on_start / enabled / interval_min / last_sync）；
+// - 认证方式（auth，v4.29）：
+//     `auto`（默认）——软件不注入任何凭据，认证全部交给本机 git：
+//         https 地址 → 系统凭据管理器（首次登录一次后长期免输入）；
+//         SSH 地址 → 本机 ~/.ssh 密钥（首次连接经 StrictHostKeyChecking=accept-new 记录主机密钥）；
+//     `token`（v4.27 行为，保留）——令牌只存 Windows 凭据管理器（keyring，SPEC-012），
+//         推送/拉取时经 `git -c http.extraheader=...` 一次性注入 Basic 头（不落盘、不进 .git/config），
+//         仅此模式设 GIT_TERMINAL_PROMPT=0（认证失败立即返回，不挂在凭据输入提示上）；
+//        Basic 用户名：github = `x-access-token`；gitee = `<仓库地址第一段(用户名)>`；
+// - 仓库地址支持两种合法形式：`https://主机/owner/repo.git` 与 SSH 形式 `git@主机:owner/repo.git`；
 // - 三时机：①打开软件时（on_start，默认开）②每次保存后（enabled，默认关）③定时（interval_min，0=关）；
 // - 远端已有历史而本地为全新数据仓时，push 被拒后自动「安全对齐」一次（fetch + reset --soft，
 //   只移动 HEAD、不动工作区文件），绝不自动 merge；
@@ -23,6 +28,10 @@ const KEYRING_ACCOUNT: &str = "github_pat";
 
 const DEFAULT_PLATFORM: &str = "github";
 const DEFAULT_BRANCH: &str = "main";
+/// 认证方式默认值（v4.29）：auto = 交给本机 git（凭据管理器 / SSH 密钥），token = 注入 Basic 头
+const DEFAULT_AUTH: &str = "auto";
+/// auto 模式下 SSH 地址的 ssh 命令：首次连接自动记录主机密钥，之后不符则拒绝
+const SSH_CMD: &str = "ssh -o StrictHostKeyChecking=accept-new";
 /// 定时同步可选档位（分钟）；0 = 关闭
 const INTERVALS: [u32; 5] = [0, 5, 15, 30, 60];
 
@@ -30,6 +39,8 @@ const INTERVALS: [u32; 5] = [0, 5, 15, 30, 60];
 #[derive(Serialize)]
 pub struct GitSyncConfig {
     pub platform: String,
+    /// 认证方式：auto（交给本机 git，默认）/ token（注入 Basic 头）
+    pub auth: String,
     pub remote: String,
     pub branch: String,
     pub on_start: bool,
@@ -43,6 +54,7 @@ pub struct GitSyncConfig {
 /// 归一化后的同步配置（内部流转用）
 struct SyncCfg {
     platform: String,
+    auth: String,
     remote: String,
     branch: String,
     on_start: bool,
@@ -80,6 +92,7 @@ fn read_sync_cfg(root: &Path) -> SyncCfg {
     };
     SyncCfg {
         platform: normalize_platform(&str_or("platform", DEFAULT_PLATFORM)),
+        auth: normalize_auth(&str_or("auth", DEFAULT_AUTH)),
         remote: g.get("remote").and_then(|x| x.as_str()).unwrap_or("").trim().to_string(),
         branch: str_or("branch", DEFAULT_BRANCH),
         on_start: g.get("on_start").and_then(|x| x.as_bool()).unwrap_or(true),
@@ -95,9 +108,28 @@ fn normalize_platform(p: &str) -> String {
     }
 }
 
+fn normalize_auth(a: &str) -> String {
+    match a.trim().to_ascii_lowercase().as_str() {
+        "token" => "token".to_string(),
+        _ => DEFAULT_AUTH.to_string(),
+    }
+}
+
 fn normalize_interval(n: u64) -> u32 {
     let n = n as u32;
     if INTERVALS.contains(&n) { n } else { 0 }
+}
+
+/// 仓库地址是否合法：`https://…` 或 SSH 形式（`git@主机:…` / `ssh://…`）
+fn is_valid_remote(remote: &str) -> bool {
+    let r = remote.trim();
+    r.starts_with("https://") || r.starts_with("ssh://") || r.starts_with("git@")
+}
+
+/// 是否为 SSH 形式的远端地址（auto 模式下需附主机密钥策略）
+fn is_ssh_remote(remote: &str) -> bool {
+    let r = remote.trim();
+    r.starts_with("ssh://") || r.starts_with("git@")
 }
 
 fn platform_label(platform: &str) -> &'static str {
@@ -180,12 +212,32 @@ fn auth_arg(platform: &str, remote: &str, token: &str) -> Result<String, String>
     ))
 }
 
-/// 过滤令牌后再回显 git 错误（令牌绝不进入 UI / 日志）
-fn safe_err(err: &str, auth: &str, token: &str) -> String {
-    err.replace(auth, "<已隐藏>").replace(token, "<已隐藏>")
+/// 过滤令牌后再回显 git 错误（令牌绝不进入 UI / 日志；auto 模式下无令牌可过滤）
+fn safe_err(err: &str, cfg: &SyncCfg, token: &str) -> String {
+    if cfg.auth != "token" || token.is_empty() {
+        return err.to_string();
+    }
+    let mut s = err.replace(token, "<已隐藏>");
+    if let Ok(auth) = auth_arg(&cfg.platform, &cfg.remote, token) {
+        s = s.replace(&auth, "<已隐藏>");
+    }
+    s
 }
 
-/// 在数据根跑 git，并禁用终端凭据提示（认证失败立即返回，不阻塞线程）
+/// 网络操作附加参数（v4.29）：
+/// - auto：不注入任何凭据——https 交给系统凭据管理器；SSH 地址附主机密钥策略；
+/// - token：`-c http.extraheader=…` 一次性注入 Basic 头（不落盘、不进 .git/config）。
+fn net_args(cfg: &SyncCfg, token: &str) -> Result<Vec<String>, String> {
+    if cfg.auth == "token" {
+        return Ok(vec!["-c".to_string(), auth_arg(&cfg.platform, &cfg.remote, token)?]);
+    }
+    if is_ssh_remote(&cfg.remote) {
+        return Ok(vec!["-c".to_string(), format!("core.sshCommand={SSH_CMD}")]);
+    }
+    Ok(Vec::new())
+}
+
+/// 本地 git 操作（commit / reset / update-ref 等，无网络）：禁用终端凭据提示即可
 fn git_out(root: &Path, args: &[&str]) -> Result<Output, String> {
     fs_cmds::git(args)
         .current_dir(root)
@@ -194,13 +246,26 @@ fn git_out(root: &Path, args: &[&str]) -> Result<Output, String> {
         .map_err(|e| format!("git 无法启动：{e}"))
 }
 
+/// 网络 git 操作（push / fetch）：按认证方式注入参数；
+/// 仅 token 模式设 GIT_TERMINAL_PROMPT=0（auto 模式保留凭据管理器弹窗机会，stdin 为空不会挂起）。
+fn git_net(root: &Path, cfg: &SyncCfg, token: &str, args: &[&str]) -> Result<Output, String> {
+    let mut full = net_args(cfg, token)?;
+    full.extend(args.iter().map(|s| s.to_string()));
+    let refs: Vec<&str> = full.iter().map(|s| s.as_str()).collect();
+    let mut c = fs_cmds::git(&refs);
+    c.current_dir(root);
+    if cfg.auth == "token" {
+        c.env("GIT_TERMINAL_PROMPT", "0");
+    }
+    c.output().map_err(|e| format!("git 无法启动：{e}"))
+}
+
 /// 推送 origin/<branch>
 fn push(root: &Path, cfg: &SyncCfg, token: &str) -> Result<(), String> {
-    let auth = auth_arg(&cfg.platform, &cfg.remote, token)?;
-    let out = git_out(root, &["-c", &auth, "push", "origin", &cfg.branch])?;
+    let out = git_net(root, cfg, token, &["push", "origin", &cfg.branch])?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(format!("推送失败：{}", safe_err(&err, &auth, token)));
+        return Err(format!("推送失败：{}", safe_err(&err, cfg, token)));
     }
     Ok(())
 }
@@ -216,13 +281,12 @@ fn is_reject(err: &str) -> bool {
 /// 远端已有历史而本地为全新/无关历史时：把远端提交接续为本地基线，再提交本地文件并重推。
 /// `reset --soft` 只移动 HEAD，**绝不触碰工作区与文件**；不做 merge。
 fn align_and_retry(root: &Path, cfg: &SyncCfg, token: &str) -> Result<(), String> {
-    let auth = auth_arg(&cfg.platform, &cfg.remote, token)?;
-    let fetched = git_out(root, &["-c", &auth, "fetch", "origin", &cfg.branch])?;
+    let fetched = git_net(root, cfg, token, &["fetch", "origin", &cfg.branch])?;
     if !fetched.status.success() {
         let err = String::from_utf8_lossy(&fetched.stderr).trim().to_string();
         return Err(format!(
-            "远端仓库已有内容，自动对齐失败（fetch 失败）：{}\n请检查网络，以及令牌是否具备 repo 权限。",
-            safe_err(&err, &auth, token)
+            "远端仓库已有内容，自动对齐失败（fetch 失败）：{}\n请检查网络，以及仓库访问权限（SSH 密钥 / 凭据管理器凭据是否可用）。",
+            safe_err(&err, cfg, token)
         ));
     }
     let target = format!("origin/{}", cfg.branch);
@@ -276,6 +340,15 @@ fn require_token(cfg: &SyncCfg) -> Result<String, String> {
     })
 }
 
+/// 取本次同步所需令牌（v4.29）：token 模式必须已保存；auto 模式不读凭据管理器，返回空串。
+fn token_for(cfg: &SyncCfg) -> Result<String, String> {
+    if cfg.auth == "token" {
+        require_token(cfg)
+    } else {
+        Ok(String::new())
+    }
+}
+
 /* ---- Tauri commands（全部 async：阻塞体由运行时放线程池，v4.5 红线） ---- */
 
 #[tauri::command(async)]
@@ -285,6 +358,7 @@ pub fn git_sync_get_config() -> Result<GitSyncConfig, String> {
     let g = read_git_cfg(&root);
     Ok(GitSyncConfig {
         platform: c.platform,
+        auth: c.auth,
         remote: c.remote,
         branch: c.branch,
         on_start: c.on_start,
@@ -298,10 +372,12 @@ pub fn git_sync_get_config() -> Result<GitSyncConfig, String> {
 
 /// 保存同步设置。令牌语义：Some(非空)=写入密钥链 / Some("")=清除 / None=保持不动。
 /// v4.27：新增 platform / on_start / interval_min（非法值回落默认，不报错中断保存）。
+/// v4.29：新增 auth（auto 默认 / token）；地址校验放宽为 https 或 SSH 形式。
 #[tauri::command(async)]
 pub fn git_sync_set_config(
     enabled: bool,
     platform: String,
+    auth: String,
     on_start: bool,
     interval_min: u32,
     remote: String,
@@ -310,6 +386,7 @@ pub fn git_sync_set_config(
 ) -> Result<(), String> {
     let root = fs_cmds::data_root();
     let platform = normalize_platform(&platform);
+    let auth = normalize_auth(&auth);
     let remote = remote.trim().to_string();
     let branch = {
         let b = branch.trim();
@@ -318,14 +395,23 @@ pub fn git_sync_set_config(
     let interval_min = normalize_interval(interval_min as u64);
 
     if !remote.is_empty() {
-        if !remote.starts_with("https://") {
-            return Err("仓库地址必须以 https:// 开头".into());
-        }
-        if platform == "gitee" && gitee_owner(&remote).is_none() {
+        if !is_valid_remote(&remote) {
             return Err(
-                "Gitee 仓库地址应形如 https://gitee.com/你的用户名/仓库名.git（第一段必须是你的 Gitee 用户名；组织仓库暂不支持）"
+                "仓库地址应形如 https://主机/用户名/仓库名.git，或 SSH 形式 git@主机:用户名/仓库名.git"
                     .into(),
             );
+        }
+        // 仅「私人令牌 + Gitee」组合仍要求 https 且能从地址解析出用户名（Basic 认证需要）
+        if platform == "gitee" && auth == "token" {
+            if !remote.starts_with("https://") {
+                return Err("使用私人令牌认证时，Gitee 仓库地址必须是 https:// 形式".into());
+            }
+            if gitee_owner(&remote).is_none() {
+                return Err(
+                    "Gitee 仓库地址应形如 https://gitee.com/你的用户名/仓库名.git（第一段必须是你的 Gitee 用户名；组织仓库暂不支持）"
+                        .into(),
+                );
+            }
         }
     }
 
@@ -346,6 +432,7 @@ pub fn git_sync_set_config(
 
     let mut g = read_git_cfg(&root);
     g["platform"] = serde_json::json!(platform);
+    g["auth"] = serde_json::json!(auth);
     g["enabled"] = serde_json::json!(enabled);
     g["on_start"] = serde_json::json!(on_start);
     g["interval_min"] = serde_json::json!(interval_min);
@@ -377,7 +464,7 @@ pub fn git_sync_now() -> Result<String, String> {
     if cfg.remote.is_empty() {
         return Err("尚未配置仓库地址——请先在设置页填写并保存".into());
     }
-    let token = require_token(&cfg)?;
+    let token = token_for(&cfg)?;
     sync_commit_push(&root, "手动同步", &cfg, &token)
 }
 
@@ -390,9 +477,12 @@ pub fn git_sync_on_start() -> Result<String, String> {
     if !cfg.on_start || cfg.remote.is_empty() {
         return Ok("skipped".to_string());
     }
-    let Ok(token) = read_token() else {
-        eprintln!("[git_sync] 已开启启动同步但未保存令牌，跳过");
-        return Ok("skipped".to_string());
+    let token = match token_for(&cfg) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[git_sync] 已开启启动同步但未保存令牌，跳过：{e}");
+            return Ok("skipped".to_string());
+        }
     };
     sync_commit_push(&root, "启动同步", &cfg, &token).map_err(|e| {
         eprintln!("[git_sync] 启动同步失败：{e}");
@@ -408,8 +498,9 @@ pub fn git_sync_tick() -> Result<String, String> {
     if cfg.remote.is_empty() {
         return Ok("skipped".to_string());
     }
-    let Ok(token) = read_token() else {
-        return Ok("skipped".to_string());
+    let token = match token_for(&cfg) {
+        Ok(t) => t,
+        Err(_) => return Ok("skipped".to_string()),
     };
     sync_commit_push(&root, "定时同步", &cfg, &token).map_err(|e| {
         eprintln!("[git_sync] 定时同步失败：{e}");
@@ -424,9 +515,12 @@ pub(crate) fn push_if_enabled(root: &Path) {
     if !cfg.enabled || cfg.remote.is_empty() {
         return;
     }
-    let Ok(token) = read_token() else {
-        eprintln!("[git_sync] 已启用同步但未保存令牌，跳过推送");
-        return;
+    let token = match token_for(&cfg) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[git_sync] 已启用同步但未保存令牌，跳过推送：{e}");
+            return;
+        }
     };
     match push_with_align(root, &cfg, &token) {
         Ok(()) => {

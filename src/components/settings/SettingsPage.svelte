@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import SettingsHelp from "./SettingsHelp.svelte";
+  import Manual from "../manual/Manual.svelte";
+  import ManualButton from "../manual/ManualButton.svelte";
+  import { manual } from "../../stores/manual.svelte";
   import AuthorDialog from "./AuthorDialog.svelte";
   import AiConfigSection from "./AiConfigSection.svelte";
   import GitSyncSection from "./GitSyncSection.svelte";
@@ -29,9 +31,8 @@
   ];
 
   const purpose =
-    "配置你自己的 GitHub / Gitee 私密仓同步与 AI（软件不内置任何账号、密钥或仓库地址）；点右上角「说明」查看完整配置步骤。";
+    "配置你自己的数据同步与 AI（软件不内置任何账号、密钥或仓库地址）；完整教程见右上角「说明书」。";
 
-  let helpOpen = false;
   let authorOpen = false;
   let dataRoot = "";
   let dirMsg = "";
@@ -110,10 +111,7 @@
 <div class="page">
   <div class="head">
     <p class="purpose">{purpose}</p>
-    <button class="btn-secondary" onclick={() => (helpOpen = true)}>
-      <Icon name="help" size={21} />
-      说明
-    </button>
+    <ManualButton />
   </div>
 
   <GitSyncSection />
@@ -137,18 +135,15 @@
       </select>
     </label>
 
-    <p class="block-hint">
-      选「最小化到托盘」时程序仍在后台运行：托盘图标左键唤回主窗口，右键可「显示主窗口 / 退出应用」；
-      驻留期间隆中对会话不会丢失。
-    </p>
+    <p class="block-hint">选「最小化到托盘」后程序在后台驻留：托盘图标左键唤回、右键「显示主窗口 / 退出」。</p>
   </section>
 
   <!-- 数据目录（v4.22 §3.1）：全部数据都是普通 Markdown 文件（CODE-008） -->
   <section class="card block">
     <h2 class="block-title">数据</h2>
     <p class="block-hint">
-      全部数据都是普通 Markdown 文件（daily 日记 / life 板块 / corpus 语料 / conversations 对话归档 / events 循环事件），
-      可用任何编辑器直接打开与备份；各目录用途详见数据根目录下的 README.md。
+      全部数据都是普通 Markdown 文件，可直接用任何编辑器打开与备份。
+      <button class="link-btn" onclick={() => manual.openManual()}>目录说明见说明书</button>
     </p>
 
     <div class="field">
@@ -227,8 +222,8 @@
     <button class="btn-secondary author-btn" onclick={() => (authorOpen = true)}>软件作者</button>
   </div>
 
-  {#if helpOpen}
-    <SettingsHelp onclose={() => (helpOpen = false)} />
+  {#if manual.open}
+    <Manual onclose={() => manual.closeManual()} />
   {/if}
   {#if authorOpen}
     <AuthorDialog onclose={() => (authorOpen = false)} />

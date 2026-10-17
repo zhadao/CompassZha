@@ -219,7 +219,7 @@ fn default_config_json() -> String {
             { "id": "emotion-self", "name": "情绪与自我", "keywords": ["情绪", "焦虑", "心态", "自我", "成长", "内耗", "压力"] },
             { "id": "health", "name": "健康", "keywords": ["健康", "睡眠", "运动", "身体", "作息", "饮食", "精力"] }
         ],
-        "git": { "platform": "github", "remote": "", "branch": "main", "on_start": true, "enabled": false, "interval_min": 0 },
+        "git": { "platform": "github", "auth": "auto", "remote": "", "branch": "main", "on_start": true, "enabled": false, "interval_min": 0 },
         "ai": { "provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "deepseek-chat" },
         "ai_companion": { "kind": "solomd", "enabled": false },
         "paths": { "daily": "daily", "life": "life", "corpus": "corpus" }

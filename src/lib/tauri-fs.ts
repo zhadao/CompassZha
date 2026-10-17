@@ -65,9 +65,14 @@ export function boardDefaultRel(boardName: string): string {
 /** 同步平台：github / gitee（v4.27） */
 export type GitPlatform = "github" | "gitee";
 
+/** 认证方式（v4.29）：auto = 交给本机 git（凭据管理器 / SSH 密钥，免输入）；token = 注入私人令牌 */
+export type GitAuth = "auto" | "token";
+
 /** git_sync_get_config 返回的同步配置（token_saved=true 表示密钥链已存令牌） */
 export interface GitSyncConfig {
   platform: GitPlatform;
+  /** 认证方式：auto（默认）/ token（v4.29） */
+  auth: GitAuth;
   remote: string;
   branch: string;
   /** 打开软件时对比变更并提交推送一次（v4.27 默认时机） */
@@ -89,6 +94,7 @@ export const gitSyncGetConfig = (): Promise<GitSyncConfig> =>
 export const gitSyncSetConfig = (
   enabled: boolean,
   platform: GitPlatform,
+  auth: GitAuth,
   onStart: boolean,
   intervalMin: number,
   remote: string,
@@ -98,6 +104,7 @@ export const gitSyncSetConfig = (
   invoke<void>("git_sync_set_config", {
     enabled,
     platform,
+    auth,
     onStart,
     intervalMin,
     remote,

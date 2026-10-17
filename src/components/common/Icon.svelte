@@ -21,6 +21,11 @@
   import mWeightRaw from "../../assets/icons/dashboard/体重.svg?raw";
   import mExpenseRaw from "../../assets/icons/dashboard/当日支出.svg?raw";
   import mMoodRaw from "../../assets/icons/dashboard/心情.svg?raw";
+  import mMood1Raw from "../../assets/icons/dashboard/心情1.svg?raw";
+  import mMood2Raw from "../../assets/icons/dashboard/心情2.svg?raw";
+  import mMood3Raw from "../../assets/icons/dashboard/心情3.svg?raw";
+  import mMood4Raw from "../../assets/icons/dashboard/心情4.svg?raw";
+  import mMood5Raw from "../../assets/icons/dashboard/心情5.svg?raw";
   import mFocusRaw from "../../assets/icons/dashboard/专注时长.svg?raw";
   import mStepsRaw from "../../assets/icons/dashboard/运动步数.svg?raw";
 
@@ -70,6 +75,11 @@
     "metric-weight": mWeightRaw,
     "metric-expense": mExpenseRaw,
     "metric-mood": mMoodRaw,
+    "mood-1": mMood1Raw,
+    "mood-2": mMood2Raw,
+    "mood-3": mMood3Raw,
+    "mood-4": mMood4Raw,
+    "mood-5": mMood5Raw,
     "metric-focus": mFocusRaw,
     "metric-steps": mStepsRaw,
     点子: lifeIdeaRaw,

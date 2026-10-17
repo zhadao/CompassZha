@@ -1,6 +1,6 @@
 [package]
 name = "compass"
-version = "0.2.5"
+version = "0.2.6"
 description = "CompassZha 人生仪表盘 · 主工程（阶段 1+）"
 edition = "2021"
 
@@ -32,3 +32,5 @@ epub-parser = "0.3"
 pdf_oxide = "0.3"
 # v4.26 修正：文件对话框改用 Tauri 官方插件（rfd 在 async 命令线程里 Windows 对话框弹不出/静默返回空）
 tauri-plugin-dialog = "2"
+# v4.31 §2.17：单实例约束——同一时刻仅允许一个进程/窗口（重复启动时唤回已有窗口并退出新实例）
+tauri-plugin-single-instance = "2"
