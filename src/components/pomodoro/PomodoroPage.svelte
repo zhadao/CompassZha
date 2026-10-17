@@ -6,11 +6,8 @@
    * 计时在 store 层全局运行（切分区继续走）；记录写入当日 ## 专注记录 + 累加 focus_minutes（阶段三 3.1 已接真）。
    */
   import { app } from "../../stores/app.svelte";
-  import StaticBadge from "../layout/StaticBadge.svelte";
+  import Segmented from "../common/Segmented.svelte";
   import FocusRecordList from "./FocusRecordList.svelte";
-
-  const purpose =
-    "干什么：记录专注时间。倒计时用于限定时长的短任务，正计时不知道会专注多久时用——停表即记录，数据进仪表盘与当日日记。";
 
   const PRESETS = [10, 25, 40];
   /** 模式选择（仅空闲时可切） */
@@ -62,9 +59,6 @@
 </script>
 
 <div class="page">
-  <StaticBadge />
-  <p class="purpose">{purpose}</p>
-
   <section class="card block center">
     {#if running}
       <!-- 运行 / 暂停态：显示实时计时 -->
@@ -86,10 +80,12 @@
       </div>
     {:else if modeSel === "countdown"}
       <!-- 空闲 · 倒计时配置 -->
-      <div class="tabs">
-        <button class="tab active">倒计时</button>
-        <button class="tab" onclick={() => (modeSel = "stopwatch")}>正计时</button>
-      </div>
+      <Segmented
+        ariaLabel="计时模式"
+        options={[{ value: "countdown", label: "倒计时" }, { value: "stopwatch", label: "正计时" }]}
+        value={modeSel}
+        onchange={(v) => (modeSel = v as "countdown" | "stopwatch")}
+      />
       <div class="timer idle">{`${String(effMin).padStart(2, "0")}:00`}</div>
       <p class="status">给自己限定一段专注时间</p>
       <div class="config">
@@ -115,10 +111,12 @@
       </div>
     {:else}
       <!-- 空闲 · 正计时配置 -->
-      <div class="tabs">
-        <button class="tab" onclick={() => (modeSel = "countdown")}>倒计时</button>
-        <button class="tab active">正计时</button>
-      </div>
+      <Segmented
+        ariaLabel="计时模式"
+        options={[{ value: "countdown", label: "倒计时" }, { value: "stopwatch", label: "正计时" }]}
+        value={modeSel}
+        onchange={(v) => (modeSel = v as "countdown" | "stopwatch")}
+      />
       <div class="timer idle">00:00</div>
       <p class="status">不知道会专注多久？开始后自由专注，停表那一刻即记录</p>
       <div class="config">
@@ -138,12 +136,6 @@
     position: relative;
   }
 
-  .purpose {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-tertiary);
-    margin-bottom: var(--space-2);
-  }
-
   .block {
     padding: var(--space-4);
     margin-bottom: var(--space-3);
@@ -156,30 +148,9 @@
     gap: var(--space-2);
   }
 
-  .tabs {
-    display: flex;
-    gap: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-1);
-  }
-
-  .tab {
-    font-size: var(--font-size-sm);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-secondary);
-  }
-
-  .tab.active {
-    background-color: var(--color-primary-light);
-    color: var(--color-primary);
-    font-weight: 600;
-  }
-
   .mode-tag {
     font-size: var(--font-size-xs);
-    color: var(--color-surface);
+    color: var(--color-primary-contrast);
     background-color: var(--color-primary);
     border-radius: var(--radius-sm);
     padding: var(--space-1) var(--space-2);
@@ -235,7 +206,7 @@
 
   .preset.active {
     border-color: var(--color-primary);
-    color: var(--color-primary);
+    color: var(--color-title);
     background-color: var(--color-primary-light);
     font-weight: 600;
   }

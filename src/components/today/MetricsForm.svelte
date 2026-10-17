@@ -108,7 +108,7 @@
     <div class="actions">
       <button class="btn-primary" type="submit">写入今日</button>
       {#if saved}
-        <span class="saved-tip">已写入 ✓（内存）</span>
+        <span class="saved-tip">已写入今日文件 ✓</span>
       {/if}
     </div>
   </form>

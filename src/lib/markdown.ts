@@ -19,7 +19,19 @@
 import type { DailyMetrics, DailyNote, FocusSession, TaskItem } from "../types/schema";
 import { emptyMetrics } from "../types/schema";
 import { genId } from "../mock/preview";
-import type { EventItem } from "../types/schema";
+import type { EventItem, RecurFreq, RecurRule } from "../types/schema";
+
+/** 循环实例机器可读后缀（v4.21 §3.2）：`<!--r:<规则id>-->`，用于右键识别「循环实例」 */
+const RULE_SUFFIX = /\s*<!--r:([^>\s]+)-->\s*$/;
+
+/** 事件标题行 → 文本（含循环实例后缀，写入与预览共用） */
+function eventLine(e: EventItem): string {
+  const base =
+    e.start === null
+      ? `- 全天 · ${e.title}`
+      : `- ${e.start}${e.end ? `-${e.end}` : ""} ${e.title}`;
+  return e.ruleId ? `${base} <!--r:${e.ruleId}-->` : base;
+}
 
 /** frontmatter 中 UI 管理的量化指标键（§3.2；其余键如 habits/goals/energy_peak 原样保留） */
 const METRIC_KEYS = [
@@ -321,28 +333,33 @@ export function writeFocusLog(text: string, sessions: FocusSession[]): string {
 /** 写回 ## 日程（`- HH:mm-HH:mm 标题` / `- 全天 · 标题`，按时间排序；v4.4 事件落盘） */
 export function writeSchedules(text: string, date: string, events: EventItem[]): string {
   const day = sortEvents(events.filter((e) => e.date === date));
-  const body = day
-    .map((e) =>
-      e.start === null
-        ? `- 全天 · ${e.title}`
-        : `- ${e.start}${e.end ? `-${e.end}` : ""} ${e.title}`,
-    )
-    .join("\n");
+  const body = day.map(eventLine).join("\n");
   return eolAware(text, (lf) => replaceSectionBody(lf, "日程", body));
 }
 
-/** `## 日程` 行 → 事件（loadAll 反向装载；source 统一 manual，排程关联不还原） */
+/** `## 日程` 行 → 事件（loadAll 反向装载；source 统一 manual，排程关联不还原；含循环实例后缀还原 ruleId） */
 export function schedulesToEvents(schedules: string[], date: string): EventItem[] {
   const out: EventItem[] = [];
-  for (const line of schedules) {
+  for (const raw of schedules) {
+    const rm = RULE_SUFFIX.exec(raw);
+    const line = rm ? raw.slice(0, rm.index) : raw;
+    const ruleId = rm ? rm[1] : undefined;
     let m = /^-\s*全天\s*·\s*(.+)$/.exec(line);
     if (m) {
-      out.push({ id: genId("evt"), title: m[1], date, start: null, end: null, source: "manual" });
+      out.push({ id: genId("evt"), title: m[1].trim(), date, start: null, end: null, source: "manual", ruleId });
       continue;
     }
     m = /^-\s*(\d{1,2}:\d{2})(?:-(\d{1,2}:\d{2}))?\s+(.+)$/.exec(line);
     if (m) {
-      out.push({ id: genId("evt"), title: m[3], date, start: m[1], end: m[2] ?? null, source: "manual" });
+      out.push({
+        id: genId("evt"),
+        title: m[3].trim(),
+        date,
+        start: m[1],
+        end: m[2] ?? null,
+        source: "manual",
+        ruleId,
+      });
     }
   }
   return out;
@@ -439,6 +456,106 @@ export function buildGoalStats(stats: GoalStats): string {
   return lines.join("\n");
 }
 
+/* ---- 循环事件规则库（v4.21 §2.10：events/循环事件.md，分区式 MD，可手改、AI 可读） ---- */
+
+const FREQS: readonly RecurFreq[] = ["daily", "weekly", "monthly", "yearly"];
+
+/** 标量：null/~/空 → null；引号串去引号；其余原样 */
+function ruleScalar(v: string): string | null {
+  const t = v.trim();
+  if (t === "" || t === "null" || t === "~") return null;
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
+
+/** 流式数组 → 字符串列表（去引号/空白） */
+function strArr(v: string): string[] {
+  const t = v.trim();
+  if (!t.startsWith("[") || !t.endsWith("]")) return [];
+  return t
+    .slice(1, -1)
+    .split(",")
+    .map((x) => ruleScalar(x) ?? "")
+    .filter(Boolean);
+}
+
+/** 流式数组 → 数字列表（weekly 用） */
+function numArr(v: string): number[] {
+  return strArr(v).map(Number).filter((n) => Number.isFinite(n));
+}
+
+/** 解析规则库：`## <标题>` 分区 + `- key: value` 行（容错 CRLF/全半角空白；非法节跳过） */
+export function parseRecurringRules(text: string): RecurRule[] {
+  const lf = text.includes("\r\n") ? text.replace(/\r\n/g, "\n") : text;
+  const out: RecurRule[] = [];
+  let fields: Record<string, string> | null = null;
+  let heading = "";
+  const flush = (): void => {
+    if (!fields) return;
+    const id = (fields.id ?? "").trim();
+    const freq = (fields.freq ?? "").trim() as RecurFreq;
+    if (id && FREQS.includes(freq)) {
+      out.push({
+        id,
+        title: (fields.title ?? heading).trim(),
+        freq,
+        interval: Math.max(1, Math.floor(Number(fields.interval) || 1)),
+        weekdays: numArr(fields.weekdays ?? ""),
+        start_date: (fields.start_date ?? "").trim(),
+        end_date: ruleScalar(fields.end_date ?? ""),
+        start: ruleScalar(fields.start ?? ""),
+        end: ruleScalar(fields.end ?? ""),
+        except: strArr(fields.except ?? ""),
+        materialized: strArr(fields.materialized ?? ""),
+      });
+    }
+    fields = null;
+  };
+  for (const line of lf.split("\n")) {
+    const h = /^##[ \t\u3000]+(.+?)[ \t\u3000]*$/.exec(line);
+    if (h) {
+      flush();
+      heading = h[1].trim();
+      fields = {};
+      continue;
+    }
+    if (!fields) continue;
+    const m = /^[-*][ \t\u3000]*([A-Za-z_]+)[ \t\u3000]*:[ \t\u3000]*(.*)$/.exec(line);
+    if (m) fields[m[1]] = m[2].trim();
+  }
+  flush();
+  return out;
+}
+
+/** 序列化规则库（每规则一节；字段顺序与 §2.10 示例一致） */
+export function buildRecurringRules(rules: RecurRule[]): string {
+  const lines = [
+    "# 循环事件规则",
+    "",
+    "> 自动生成：循环事件规则库（每规则一节）。应用启动与规则增删改后按「今天 ~ 今天 + 3 个月」懒物化实例；更远日期不创建任何文件。可手改、AI 可读。",
+    "",
+  ];
+  const q = (s: string | null): string => (s === null ? "null" : JSON.stringify(s));
+  for (const r of rules) {
+    lines.push(`## ${r.title}`, "");
+    lines.push(`- id: ${r.id}`);
+    lines.push(`- title: ${r.title}`);
+    lines.push(`- freq: ${r.freq}`);
+    lines.push(`- interval: ${r.interval}`);
+    lines.push(`- weekdays: [${r.weekdays.join(", ")}]`);
+    lines.push(`- start_date: ${r.start_date}`);
+    lines.push(`- end_date: ${r.end_date ?? "null"}`);
+    lines.push(`- start: ${q(r.start)}`);
+    lines.push(`- end: ${q(r.end)}`);
+    lines.push(`- except: [${r.except.join(", ")}]`);
+    lines.push(`- materialized: [${r.materialized.join(", ")}]`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
 /* ---- 模板与全量序列化 ---- */
 
 /** §3.2 v4.2 模板：空 frontmatter（全部指标 null）+ 五个空章节 */
@@ -492,10 +609,5 @@ function sortEvents(events: EventItem[]): EventItem[] {
 /** 序列化为当日文件的 `## 日程` 区块（AI Native：单文件即一天全貌） */
 export function eventsToMarkdown(date: string, events: EventItem[]): string {
   const day = sortEvents(events.filter((e) => e.date === date));
-  const lines = day.map((e) =>
-    e.start === null
-      ? `- 全天 · ${e.title}`
-      : `- ${e.start}${e.end ? `-${e.end}` : ""} ${e.title}`,
-  );
-  return ["## 日程", ...lines].join("\n");
+  return ["## 日程", ...day.map(eventLine)].join("\n");
 }

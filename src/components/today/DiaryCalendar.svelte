@@ -266,11 +266,11 @@
 
   .cal-day.selected {
     background-color: var(--color-primary);
-    color: #fff;
+    color: var(--color-primary-contrast);
   }
 
   .cal-day.selected .marker.star {
-    color: #fff;
+    color: var(--color-primary-contrast);
   }
 
   .day-num {
@@ -291,7 +291,7 @@
   }
 
   .cal-day.selected .marker.dot {
-    background-color: #fff;
+    background-color: var(--color-primary-contrast);
   }
 
   .marker.star {
@@ -318,7 +318,7 @@
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.12));
+    box-shadow: var(--shadow-3);
     padding: var(--space-1);
     display: flex;
     flex-direction: column;
@@ -332,26 +332,49 @@
   }
 
   .ctx-menu button {
+    position: relative;
     text-align: left;
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
     background: transparent;
     border: none;
     border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) calc(var(--space-2) + 3px);
     cursor: pointer;
   }
 
+  /* GitHub 式悬停：左侧 3px 主题色竖条 + 底色微变 */
+  .ctx-menu button::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--color-primary);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
   .ctx-menu button:hover {
-    background-color: var(--color-surface-alt);
+    background-color: var(--color-primary-light);
+  }
+
+  .ctx-menu button:hover::before {
+    opacity: 1;
   }
 
   .ctx-menu button.danger {
     color: var(--color-danger);
   }
 
+  .ctx-menu button.danger::before {
+    background: var(--color-danger);
+  }
+
   .ctx-menu button.danger.armed {
     background-color: var(--color-danger);
-    color: #fff;
+    color: #ffffff;
   }
 </style>

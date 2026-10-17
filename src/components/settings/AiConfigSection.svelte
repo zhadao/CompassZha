@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { persist } from "../../lib/tauri-fs";
   import { aiGetConfig, aiSetConfig } from "../../lib/ai";
+  import Icon from "../common/Icon.svelte";
 
   let baseUrl = $state("https://api.deepseek.com");
   let model = $state("deepseek-chat");
@@ -97,7 +98,12 @@
 </script>
 
 <section class="card block">
-  <h2 class="section-title">AI 配置（语料对话用）</h2>
+  <div class="block-head">
+    <h2 class="section-title">AI 配置（隆中对用）</h2>
+    <span class="head-ico" title="隆中使用你自己的 DeepSeek API">
+      <Icon name="ai" size={24} />
+    </span>
+  </div>
 
   {#if !persist}
     <p class="muted">浏览器预览模式 —— AI 配置需在桌面应用内进行</p>
@@ -137,7 +143,7 @@
     <div class="sub-block">
       <h3 class="sub-title">数据分析 API（可选 · 仪表盘「AI 数据分析」用）</h3>
       <p class="sub-note">
-        建议单独再配一个 API，让数据分析对话与语料对话分开、各自提升 API 缓存命中率；
+        建议单独再配一个 API，让数据分析对话与隆中对分开、各自提升 API 缓存命中率；
         只有一个 API 时留空即可——自动与上方主 API 共用。
       </p>
       <label class="field">
@@ -185,11 +191,23 @@
     max-width: 560px;
   }
 
+  .block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+
   .section-title {
     font-size: var(--font-size-md);
     margin: 0;
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--color-border);
+  }
+
+  .head-ico {
+    display: inline-flex;
+    /* v4.19：图标随 currentColor —— 浅色近黑 / 深色近白 */
+    color: var(--color-text-primary);
   }
 
   .muted {

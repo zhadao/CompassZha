@@ -2,7 +2,9 @@
   // 软件作者弹窗（v4.16）：设置页底部「软件作者」按钮点开。
   // 首行作者公开库链接 → 基于的开源项目 → 项目与 MIT 简介 → 「捐献作者」展开收款码。
   // 链接点击经后端 open_url_https 打开系统默认浏览器（仅 https://）。
+  // v4.17：参考项目声明 uiverse.io（部分 UI 组件交互样式参考）；GitHub 式模态重漆。
   import qrcode from "../../assets/donate-qrcode.jpg";
+  import Icon from "../common/Icon.svelte";
   import { persist, openUrlHttps } from "../../lib/tauri-fs";
 
   interface Props {
@@ -20,6 +22,7 @@
     { name: "Milkdown", url: "https://github.com/Milkdown/milkdown", note: "所见即所得编辑器（MIT）" },
     { name: "ECharts", url: "https://github.com/apache/echarts", note: "趋势图表（Apache-2.0）" },
     { name: "usememos/memos", url: "https://github.com/usememos/memos", note: "界面风格参考（仅视觉借鉴，未使用其代码）" },
+    { name: "uiverse.io", url: "https://uiverse.io/", note: "UI 组件交互样式参考（部分组件仅形态借鉴，未使用其代码）" },
   ];
 
   /** 桌面内走后端命令（默认浏览器）；浏览器预览模式退化为新标签页。 */
@@ -46,7 +49,9 @@
   <div class="panel" role="dialog" aria-modal="true" aria-label="软件作者" tabindex="-1">
     <header class="panel-head">
       <h2>软件作者</h2>
-      <button class="close" onclick={onclose} aria-label="关闭软件作者">✕</button>
+      <button class="close" onclick={onclose} aria-label="关闭软件作者">
+        <Icon name="close" size={24} />
+      </button>
     </header>
 
     <div class="panel-body">
@@ -54,7 +59,10 @@
         CompassZha 由
         <button class="link" onclick={() => void openLink(repoUrl)}>zhadao</button>
         开发并开源——仓库地址：
-        <button class="link" onclick={() => void openLink(repoUrl)}>{repoUrl}</button>
+        <button class="link repo-link" onclick={() => void openLink(repoUrl)}>
+          <Icon name="github" size={24} />
+          {repoUrl}
+        </button>
       </p>
 
       <section>
@@ -101,7 +109,7 @@
   .overlay {
     position: fixed;
     inset: 0;
-    background-color: rgb(0 0 0 / 0.35);
+    background-color: var(--color-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -111,12 +119,13 @@
 
   .panel {
     background-color: var(--color-surface);
-    border-radius: var(--radius-md, 10px);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
     width: min(480px, 100%);
     max-height: 85vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+    box-shadow: var(--shadow-4);
   }
 
   .panel-head {
@@ -128,13 +137,22 @@
   }
 
   .panel-head h2 {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
     margin: 0;
   }
 
   .close {
+    display: inline-flex;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-md);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+  }
+
+  .close:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-alt);
   }
 
   .panel-body {
@@ -176,7 +194,7 @@
   }
 
   .link {
-    color: var(--color-primary, #2563eb);
+    color: var(--color-primary);
     font-size: inherit;
     padding: 0;
     word-break: break-all;
@@ -184,6 +202,18 @@
 
   .link:hover {
     text-decoration: underline;
+  }
+
+  .repo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    vertical-align: baseline;
+  }
+
+  /* v4.19：仓库地址旁的 GitHub 装饰图标随明暗自适应，深色下近白清晰 */
+  .repo-link :global(.icon) {
+    color: var(--color-text-primary);
   }
 
   .note {

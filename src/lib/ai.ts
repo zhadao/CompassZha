@@ -1,6 +1,6 @@
 /**
  * AI 对话接缝层（阶段 4 · v4.12）：唯一允许出现 invoke 调用的位置之一（与 tauri-fs.ts 同级）。
- * 语料对话仅检索 dataRoot/corpus/（日记/量化数据绝不进入检索——v4.12 用户澄清）。
+ * 语料对话（隆中对）仅检索 dataRoot/corpus/（日记/量化数据绝不进入检索——v4.12 用户澄清）。
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -70,7 +70,7 @@ export const aiSetConfig = (
     dataKey,
   });
 
-/** 语料对话：扩词 → 检索 corpus/ → 生成（返回回答 + 引用出处） */
+/** 隆中对（语料对话）：扩词 → 检索 corpus/ → 生成（返回回答 + 引用出处） */
 export const aiAsk = (messages: ChatMsg[]): Promise<AiAnswer> =>
   invoke<AiAnswer>("ai_ask", { messages });
 

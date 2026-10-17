@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { persist } from "../../lib/tauri-fs";
   import { configGetTopics, configSetTopics, type TopicCard } from "../../lib/ai";
+  import Icon from "../common/Icon.svelte";
 
   interface Props {
     onclose: () => void;
@@ -68,12 +69,14 @@
   <div class="panel" role="dialog" aria-modal="true" aria-label="索引卡编辑" tabindex="-1">
     <header class="panel-head">
       <h2>索引卡</h2>
-      <button class="close" onclick={onclose} aria-label="关闭索引卡编辑">✕</button>
+      <button class="close" onclick={onclose} aria-label="关闭索引卡编辑">
+        <Icon name="close" size={24} />
+      </button>
     </header>
 
     <div class="panel-body">
       <p class="warn">
-        ⚠ 索引卡是 AI 的路由依据，不建议频繁更改——卡是检索前帮 AI「选书架」用的，
+        索引卡是 AI 的路由依据，不建议频繁更改——卡是检索前帮 AI「选书架」用的，
         除非明确新的主题方向，保持现状即可。
       </p>
 
@@ -162,8 +165,15 @@
   }
 
   .close {
+    display: inline-flex;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-md);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+  }
+
+  .close:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-alt);
   }
 
   .panel-body {
@@ -176,8 +186,8 @@
 
   .warn {
     font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    background-color: var(--color-surface-alt);
+    color: var(--color-warning);
+    background-color: var(--color-warning-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);

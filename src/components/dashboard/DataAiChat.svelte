@@ -6,6 +6,7 @@
   import { app } from "../../stores/app.svelte";
   import { persist } from "../../lib/tauri-fs";
   import { aiGetConfig, dataAnalyzeAsk, type ChatMsg } from "../../lib/ai";
+  import Icon from "../common/Icon.svelte";
   import type { DailyMetrics } from "../../types/schema";
 
   interface Props {
@@ -106,8 +107,13 @@
 <div class="overlay" role="presentation">
   <div class="panel" role="dialog" aria-modal="true" aria-label="AI 数据分析" tabindex="-1">
     <header class="panel-head">
-      <h2>📊 AI 数据分析</h2>
-      <button class="close" onclick={onclose} aria-label="关闭">✕</button>
+      <h2 class="panel-title">
+        <Icon name="ai" size={27} />
+        AI 数据分析
+      </h2>
+      <button class="close" onclick={onclose} aria-label="关闭">
+        <Icon name="close" size={24} />
+      </button>
     </header>
 
     {#if !persist}
@@ -182,7 +188,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--space-4);
-    background: rgb(17 24 39 / 32%);
+    background: var(--color-overlay);
   }
 
   .panel {
@@ -190,10 +196,10 @@
     flex-direction: column;
     width: min(680px, calc(100vw - 48px));
     height: min(72vh, 640px);
-    background: var(--bg-elevated, #fff);
-    border: 1px solid var(--color-border, #e5e7eb);
-    border-radius: 12px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-4);
     overflow: hidden;
   }
 
@@ -202,28 +208,34 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border, #e5e7eb);
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
-  .panel-head h2 {
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     margin: 0;
-    font-size: var(--font-size-md, 16px);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-title);
   }
 
   .close {
+    display: inline-flex;
     border: none;
     background: transparent;
-    font-size: 16px;
-    line-height: 1;
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1);
     cursor: pointer;
-    color: var(--color-text-tertiary, #6b7280);
-    border-radius: 6px;
+    color: var(--color-text-tertiary);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
   }
 
   .close:hover {
-    background: var(--color-surface-alt, #f3f4f6);
+    color: var(--color-text-primary);
+    background: var(--color-surface-alt);
   }
 
   .panel-body {
@@ -280,7 +292,7 @@
   .bubble {
     max-width: 85%;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md, 10px);
+    border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
     white-space: pre-wrap;
     word-break: break-word;
@@ -289,7 +301,7 @@
 
   .msg.user .bubble {
     background-color: var(--color-primary);
-    color: #fff;
+    color: var(--color-primary-contrast);
   }
 
   .msg.ai .bubble {
@@ -303,7 +315,7 @@
 
   .error {
     font-size: var(--font-size-sm);
-    color: var(--color-danger, #dc2626);
+    color: var(--color-danger);
     margin: 0;
   }
 

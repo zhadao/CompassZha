@@ -1,6 +1,8 @@
 <script lang="ts">
   // 对话说明弹层（v4.12 · 检查点 4.4）：三节——基础操作 / 后续功能 / 注意事项。
   // 文案对标「问问立正」使用说明，按本项目引用语义简化（喂入语料一律视为可信引用源）。
+  import Icon from "../common/Icon.svelte";
+
   interface Props {
     onclose: () => void;
   }
@@ -14,10 +16,12 @@
 />
 
 <div class="overlay" role="presentation">
-  <div class="panel" role="dialog" aria-modal="true" aria-label="语料对话说明" tabindex="-1">
+  <div class="panel" role="dialog" aria-modal="true" aria-label="隆中对说明" tabindex="-1">
     <header class="panel-head">
-      <h2>语料对话说明</h2>
-      <button class="close" onclick={onclose} aria-label="关闭说明">✕</button>
+      <h2>隆中对说明</h2>
+      <button class="close" onclick={onclose} aria-label="关闭说明">
+        <Icon name="close" size={24} />
+      </button>
     </header>
 
     <div class="panel-body">
@@ -25,7 +29,7 @@
         <h3>一、基础操作</h3>
         <ul>
           <li>
-            <b>怎么喂语料：</b>点上方「📂 资源跳转」会直接打开语料文件夹（数据目录下的
+            <b>怎么喂语料：</b>点上方「资源跳转」会直接打开语料文件夹（数据目录下的
             <code>corpus\</code>）。把 Markdown 文件<b>直接丢在根目录即可</b>——
             <b>不用分类、不用建文件夹；一个文件放一处就行</b>，交叉主题的语料（既和职业又和健康相关）也只放一份，
             主题筛选是 AI 检索时做的，与文件放在哪无关。放进去下次提问即生效，无需其他操作。
@@ -52,7 +56,7 @@
             每条出处是语料库里的一个文件，可点「资源跳转」去原文核对。
           </li>
           <li>
-            <b>索引卡：</b>点上方「🗂 索引卡」可以编辑几张主题卡。它们<b>不是文件夹</b>，
+            <b>索引卡：</b>点上方「索引卡」可以编辑几张主题卡。它们<b>不是文件夹</b>，
             是 AI 检索语料时的<b>筛选标签</b>——AI 会根据你的问题选中相关的卡，
             并用卡上的「关键词」补充检索你的语料库。所以<b>编辑卡的关键词 = 调整 AI 查语料的路由</b>；
             <b>索引卡是 AI 的路由依据，不建议频繁更改</b>——除非你明确了新的主题方向。
@@ -124,8 +128,15 @@
   }
 
   .close {
+    display: inline-flex;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-md);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+  }
+
+  .close:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-alt);
   }
 
   .panel-body {

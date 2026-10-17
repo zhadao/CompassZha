@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../../stores/app.svelte";
+  import Icon from "../common/Icon.svelte";
   import TaskGoalMenu from "./TaskGoalMenu.svelte";
   import type { TaskItem } from "../../types/schema";
 
@@ -76,13 +77,17 @@
             goalMenu = { task: t, x: e.clientX, y: e.clientY };
           }}
         >
-          <button class="check" title={t.done ? "标记为未完成" : "完成"} onclick={() => onToggle(t.id)}>
-            {t.done ? "✓" : ""}
-          </button>
+          <button
+            class="check"
+            title={t.done ? "标记为未完成" : "完成"}
+            aria-label={t.done ? "标记为未完成" : "完成"}
+            aria-pressed={t.done}
+            onclick={() => onToggle(t.id)}
+          ></button>
           <div class="task-body">
             {#each parseSegments(t.text) as seg, i (i)}
               {#if seg.type === "goal"}
-                <span class="goal-tag">{seg.value}</span>
+                <span class="goal-tag"><Icon name="tag" size={17} />{seg.value}</span>
               {:else}
                 <span>{seg.value}</span>
               {/if}
@@ -92,9 +97,15 @@
             {/if}
           </div>
           <div class="task-actions">
-            <button class="act" title="排上日历" onclick={() => onSchedule(t.id)}>📆</button>
-            <button class="act" title="顺延到明天" onclick={() => onDefer(t.id)}>⏭</button>
-            <button class="act danger" title="删除" onclick={() => onRemove(t.id)}>✕</button>
+            <button class="act" title="排上日历" onclick={() => onSchedule(t.id)}>
+              <Icon name="calendar" size={21} />
+            </button>
+            <button class="act" title="顺延到明天" onclick={() => onDefer(t.id)}>
+              <Icon name="clock" size={21} />
+            </button>
+            <button class="act danger" title="删除" onclick={() => onRemove(t.id)}>
+              <Icon name="close" size={21} />
+            </button>
           </div>
         </li>
       {/each}
@@ -102,7 +113,7 @@
   {/if}
 
   <p class="tip">
-    提示：勾选会立即生效；「⏭ 顺延」把任务移到明天清单；<b>右键任务</b>可关联/取消关联人生板块。
+    提示：勾选会立即生效；「顺延」把任务移到明天清单；<b>右键任务</b>可关联/取消关联人生板块。
   </p>
 </section>
 
@@ -164,22 +175,43 @@
     text-decoration: line-through;
   }
 
+  /* 方块化勾选（v4.17）：交互形态参考 uiverse.io checkpoint，配色全走 tokens */
   .check {
+    position: relative;
     width: 20px;
     height: 20px;
     flex-shrink: 0;
-    border: 1.5px solid var(--color-border-strong);
-    border-radius: 50%;
-    color: var(--color-surface);
+    border: 2px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
     background-color: var(--color-surface);
-    font-size: var(--font-size-xs);
-    line-height: 1;
     transition: all var(--transition-fast);
   }
 
+  .check:hover {
+    border-color: var(--color-primary);
+  }
+
+  /* 内部方点：scale 动画 */
+  .check::after {
+    content: "";
+    position: absolute;
+    top: 25%;
+    left: 25%;
+    width: 50%;
+    height: 50%;
+    background-color: var(--color-primary-contrast);
+    border-radius: 1px;
+    transform: scale(0);
+    transition: transform 100ms ease;
+  }
+
   .task.done .check {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .task.done .check::after {
+    transform: scale(1);
   }
 
   .task-body {
@@ -190,9 +222,11 @@
   }
 
   .goal-tag {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     font-size: var(--font-size-xs);
-    color: var(--color-primary);
+    color: var(--color-title);
     background-color: var(--color-primary-light);
     border-radius: var(--radius-sm);
     padding: 0 var(--space-1);
@@ -216,7 +250,7 @@
   }
 
   .act {
-    font-size: var(--font-size-sm);
+    display: inline-flex;
     padding: 2px var(--space-1);
     border-radius: var(--radius-sm);
     color: var(--color-text-tertiary);

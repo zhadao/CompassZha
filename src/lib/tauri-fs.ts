@@ -42,6 +42,10 @@ export const fsExists = (rel: string): Promise<boolean> =>
 export const fsRename = (from: string, to: string): Promise<void> =>
   invoke<void>("fs_rename", { from, to });
 
+/** 资源管理器定位选中文件（v4.20 文件树右键「定位文件位置」，§2.9） */
+export const fsReveal = (rel: string): Promise<void> =>
+  invoke<void>("fs_reveal", { rel });
+
 /** 本地 git 自动提交（保存动作 debounce 后触发；v4.10 起同步已启用时自动接推送） */
 export const gitAutoCommit = (msg: string): Promise<string> =>
   invoke<string>("git_auto_commit", { msg });
@@ -88,3 +92,44 @@ export const gitSyncNow = (): Promise<string> =>
 /** 用系统默认浏览器打开 https 链接（v4.16：「软件作者」弹窗外链）。 */
 export const openUrlHttps = (url: string): Promise<void> =>
   invoke<void>("open_url_https", { url });
+
+/* ---- 外观偏好（v4.17；非敏感，config.json appearance 对象） ---- */
+
+/** appearance_get 返回的外观偏好（Rust 侧已规范化三键） */
+export interface AppearanceConfig {
+  accent: string;
+  mode: string;
+  splash: boolean;
+}
+
+/** 读取外观偏好 */
+export const appearanceGet = (): Promise<AppearanceConfig> =>
+  invoke<AppearanceConfig>("appearance_get");
+
+/** 保存外观偏好（整组替换写回） */
+export const appearanceSet = (prefs: AppearanceConfig): Promise<void> =>
+  invoke<void>("appearance_set", { appearance: prefs });
+
+/* ---- 数据目录与窗口生命周期（v4.22 §2.11 / §3.1） ---- */
+
+/** 在资源管理器中打开数据根目录（设置页 / 侧栏「打开数据目录」） */
+export const openDataRoot = (): Promise<void> =>
+  invoke<void>("open_data_root");
+
+/** 关闭行为偏好取值：ask=首次询问 / exit=直接退出 / tray=最小化到托盘（§2.11-B） */
+export type CloseBehavior = "ask" | "exit" | "tray";
+
+/** 读取关闭行为偏好（非法/缺失回落 ask，Rust 侧已规范化） */
+export const closeBehaviorGet = (): Promise<CloseBehavior> =>
+  invoke<CloseBehavior>("close_behavior_get");
+
+/** 写入关闭行为偏好 */
+export const closeBehaviorSet = (behavior: CloseBehavior): Promise<void> =>
+  invoke<void>("close_behavior_set", { behavior });
+
+/** 退出应用（绕过 Rust 关闭拦截） */
+export const appExit = (): Promise<void> => invoke<void>("app_exit");
+
+/** 隐藏主窗口到系统托盘（进程驻留，会话不丢） */
+export const hideToTray = (): Promise<void> => invoke<void>("hide_to_tray");
+

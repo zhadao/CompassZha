@@ -9,6 +9,7 @@
   import { onMount } from "svelte";
   import { app } from "../../stores/app.svelte";
   import { offsetDays, todayKey } from "../../lib/date";
+  import BoardIcon from "../common/BoardIcon.svelte";
   import * as echarts from "echarts/core";
   import { HeatmapChart } from "echarts/charts";
   import {
@@ -115,14 +116,14 @@
   {:else}
     {#each app.lifeBoards as board (board.id)}
       <div class="heat-box">
-        <h3 class="heat-name">{board.icon} {board.name}</h3>
+        <h3 class="heat-name">
+          <BoardIcon icon={board.icon} size={30} />
+          {board.name}
+        </h3>
         <div class="heat-chart" bind:this={els[board.id]}></div>
       </div>
     {/each}
   {/if}
-  <p class="tip">
-    GitHub contribution 风格：每日清单中 #goal/板块名 被任务提及的次数越多，色块越绿；与任务勾选状态无关。
-  </p>
 </section>
 
 <style>
@@ -175,9 +176,4 @@
     text-align: center;
   }
 
-  .tip {
-    margin-top: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-tertiary);
-  }
 </style>

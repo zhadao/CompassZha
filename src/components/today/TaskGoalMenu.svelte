@@ -1,6 +1,11 @@
 <script lang="ts">
+  /**
+   * 任务右键菜单（v4.9）：GUI 勾选关联/取消关联人生板块，免手写 #tag。
+   * v4.17：GitHub 式右键菜单重漆（tokens 化 + 悬停左侧主题色竖条）。
+   */
   import { app } from "../../stores/app.svelte";
   import { hasGoalTag } from "../../lib/markdown";
+  import BoardIcon from "../common/BoardIcon.svelte";
   import type { TaskItem } from "../../types/schema";
 
   interface Props {
@@ -38,7 +43,7 @@
           onchange={() =>
             app.toggleTaskGoal(date, task.id, b.name, !hasGoalTag(task.text, b.name))}
         />
-        <span class="goal-menu-icon">{b.icon}</span>
+        <span class="goal-menu-icon"><BoardIcon icon={b.icon} size={24} /></span>
         <span class="goal-menu-name">{b.name}</span>
       </label>
     {/each}
@@ -57,45 +62,74 @@
     max-width: 240px;
     max-height: 220px;
     overflow-y: auto;
-    padding: 4px;
-    background: var(--bg-elevated, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+    padding: var(--space-1);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
   }
+
   .goal-menu-title {
-    padding: 6px 10px 4px;
-    font-size: 12px;
-    color: var(--text-secondary, #6b7280);
+    padding: var(--space-1) calc(var(--space-2) + 3px);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
   }
+
   .goal-menu-item {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 6px;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    padding-left: calc(var(--space-2) + 3px);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
   }
+
+  /* GitHub 式悬停：左侧 3px 主题色竖条 + 底色微变 */
+  .goal-menu-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--color-primary);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
   .goal-menu-item:hover {
-    background: var(--bg-hover, #f3f4f6);
+    background: var(--color-primary-light);
   }
+
+  .goal-menu-item:hover::before {
+    opacity: 1;
+  }
+
   .goal-menu-item input {
-    accent-color: var(--primary, #2563eb);
+    accent-color: var(--color-primary);
   }
+
   .goal-menu-icon {
-    font-size: 14px;
+    display: inline-flex;
+    line-height: 0;
   }
+
   .goal-menu-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .goal-menu-empty {
-    padding: 10px 12px;
-    font-size: 12px;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-xs);
     line-height: 1.6;
-    color: var(--text-secondary, #6b7280);
+    color: var(--color-text-secondary);
     text-align: center;
   }
 </style>

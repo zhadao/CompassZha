@@ -37,7 +37,7 @@ export interface TaskItem {
   deferredFrom?: string;
 }
 
-/** 日历事件（原型期仅存内存） */
+/** 日历事件 */
 export interface EventItem {
   id: string;
   title: string;
@@ -51,6 +51,45 @@ export interface EventItem {
   source: "manual" | "scheduled";
   /** 若为排程来源，关联的任务 id */
   relatedTaskId?: string;
+  /** v4.21：循环实例来源规则 id（有值 = 由循环规则懒物化生成） */
+  ruleId?: string;
+}
+
+/** 循环频率（v4.21 §2.10） */
+export type RecurFreq = "daily" | "weekly" | "monthly" | "yearly";
+
+/** 循环事件规则（v4.21 §2.10；存 events/循环事件.md，规则驱动懒物化） */
+export interface RecurRule {
+  id: string;
+  title: string;
+  freq: RecurFreq;
+  /** 每隔 N 天/周/月/年 */
+  interval: number;
+  /** 仅 weekly 使用：0=周日 … 6=周六 */
+  weekdays: number[];
+  /** 从此日开始循环（yyyy-mm-dd） */
+  start_date: string;
+  /** null = 永久循环；否则为含端点的结束日期 */
+  end_date: string | null;
+  /** HH:mm；null = 全天事件 */
+  start: string | null;
+  end: string | null;
+  /** 用户删除过的单次实例日期（重生成时跳过） */
+  except: string[];
+  /** 已生成实例日期（保存时清理早于今天的记录） */
+  materialized: string[];
+}
+
+/** 编辑器「重复」区规则草稿（v4.21） */
+export interface RecurDraft {
+  /** 编辑既有规则时其 id；新建时缺省 */
+  ruleId?: string;
+  freq: RecurFreq;
+  interval: number;
+  /** 仅 weekly：0=周日 … 6=周六 */
+  weekdays: number[];
+  /** 重复结束日期；null = 永久 */
+  endDate: string | null;
 }
 
 /** 一天的完整记录（对应 daily/yyyy/yyyy-mm-dd.md 的内存形态） */
@@ -129,6 +168,8 @@ export interface CalendarDraft {
   start: string;
   /** HH:mm */
   end: string;
+  /** v4.21：重复区草稿；null = 单次事件，否则保存为循环规则 */
+  repeat: RecurDraft | null;
 }
 
 /** 主导航分区 */

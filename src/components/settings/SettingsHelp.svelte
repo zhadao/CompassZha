@@ -1,6 +1,8 @@
 <script lang="ts">
   // 设置说明弹层（v4.11）：集中说明如何配置「自己的」GitHub 私密库与 AI API。
   // 软件本身不内置任何凭据或仓库地址，一切由用户按本说明自助配置。
+  import Icon from "../common/Icon.svelte";
+
   interface Props {
     onclose: () => void;
   }
@@ -17,7 +19,9 @@
   <div class="panel" role="dialog" aria-modal="true" aria-label="设置说明" tabindex="-1">
     <header class="panel-head">
       <h2>设置说明</h2>
-      <button class="close" onclick={onclose} aria-label="关闭说明">✕</button>
+      <button class="close" onclick={onclose} aria-label="关闭说明">
+        <Icon name="close" size={24} />
+      </button>
     </header>
 
     <div class="panel-body">
@@ -189,8 +193,8 @@
     flex-direction: column;
     width: min(720px, calc(100vw - 48px));
     max-height: calc(100vh - 80px);
-    background: var(--bg-elevated, #fff);
-    border: 1px solid var(--color-border, #e5e7eb);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
   }
@@ -200,7 +204,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border, #e5e7eb);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .panel-head h2 {
@@ -209,18 +213,15 @@
   }
 
   .close {
-    border: none;
-    background: transparent;
-    font-size: 16px;
-    line-height: 1;
-    padding: var(--space-1) var(--space-2);
-    cursor: pointer;
-    color: var(--color-text-tertiary, #6b7280);
-    border-radius: 6px;
+    display: inline-flex;
+    color: var(--color-text-tertiary);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
   }
 
   .close:hover {
-    background: var(--color-surface-alt, #f3f4f6);
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-alt);
   }
 
   .panel-body {
@@ -231,18 +232,18 @@
     gap: var(--space-4);
     font-size: var(--font-size-sm, 13px);
     line-height: 1.75;
-    color: var(--color-text-secondary, #374151);
+    color: var(--color-text-secondary);
   }
 
   .lead {
     margin: 0;
-    color: var(--color-text-primary, #1f2937);
+    color: var(--color-text-primary);
   }
 
   section h3 {
     margin: 0 0 var(--space-2);
     font-size: var(--font-size-sm, 13px);
-    color: var(--color-text-primary, #1f2937);
+    color: var(--color-text-primary);
   }
 
   section ol,
@@ -262,15 +263,15 @@
 
   th,
   td {
-    border: 1px solid var(--color-border, #e5e7eb);
+    border: 1px solid var(--color-border);
     padding: var(--space-1) var(--space-2);
     text-align: left;
     vertical-align: top;
   }
 
   th {
-    background: var(--color-surface-alt, #f9fafb);
-    color: var(--color-text-tertiary, #6b7280);
+    background: var(--color-surface-alt);
+    color: var(--color-text-tertiary);
     font-weight: 600;
   }
 
@@ -278,20 +279,20 @@
     font-size: 0.92em;
     padding: 1px 4px;
     border-radius: 4px;
-    background: var(--color-surface-alt, #f3f4f6);
-    color: var(--color-text-primary, #1f2937);
+    background: var(--color-surface-alt);
+    color: var(--color-text-primary);
   }
 
   .tip {
     margin: var(--space-2) 0 0;
     font-size: var(--font-size-xs, 12px);
-    color: var(--color-text-tertiary, #6b7280);
+    color: var(--color-text-tertiary);
   }
 
   .panel-foot {
     display: flex;
     justify-content: flex-end;
     padding: var(--space-3) var(--space-4);
-    border-top: 1px solid var(--color-border, #e5e7eb);
+    border-top: 1px solid var(--color-border);
   }
 </style>

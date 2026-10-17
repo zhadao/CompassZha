@@ -6,6 +6,8 @@
    */
   import { app } from "../../stores/app.svelte";
   import BoardDeleteDialog from "./BoardDeleteDialog.svelte";
+  import BoardIcon from "../common/BoardIcon.svelte";
+  import Icon from "../common/Icon.svelte";
   import type { BoardFile, LifeBoard } from "../../types/schema";
   import BoardEditor from "./BoardEditor.svelte";
 
@@ -108,7 +110,7 @@
   <header class="folder-header">
     <button class="btn-secondary" onclick={() => app.closeBoard()}>← 返回</button>
     <div class="crumbs">
-      <span class="crumb-icon">{board.icon}</span>
+      <span class="crumb-icon"><BoardIcon icon={board.icon} size={33} /></span>
       {#if renamingBoard}
         <input
           class="board-rename-input"
@@ -123,7 +125,7 @@
         />
       {:else}
         <span class="crumb-name">{board.name}</span>
-        <button class="btn-icon" title="重命名板块" onclick={startRenameBoard}>✏️</button>
+        <button class="btn-icon" title="重命名板块" onclick={startRenameBoard}>改名</button>
       {/if}
       <span class="crumb-path">life/{board.name}/</span>
       <span class="crumb-count">{board.files.length} 个文档</span>
@@ -163,6 +165,7 @@
                 onblur={() => (renamingId = null)}
               />
             {:else}
+              <span class="file-ico"><Icon name="file" size={20} /></span>
               <button class="file-name" onclick={() => app.openBoardFile(file.id)}>
                 {file.name}
               </button>
@@ -172,11 +175,11 @@
                   title="重命名"
                   onclick={() => startRename(file)}
                 >
-                  ✏️
+                  改名
                 </button>
                 {#if board.files.length > 1}
-                  <button class="op-btn" title="删除" onclick={() => removeFile(file)}>
-                    🗑
+                  <button class="op-btn danger" title="删除" onclick={() => removeFile(file)}>
+                    <Icon name="close" size={18} />
                   </button>
                 {/if}
               </span>
@@ -237,16 +240,17 @@
 
   .btn-icon {
     font-size: var(--font-size-xs);
-    line-height: 1;
-    border: none;
+    color: var(--color-text-tertiary);
+    border: 1px solid var(--color-border);
     background: transparent;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 2px var(--space-2);
     border-radius: var(--radius-sm);
   }
 
   .btn-icon:hover {
-    background-color: var(--color-surface-alt);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
   }
 
   .board-rename-input {
@@ -372,22 +376,40 @@
     cursor: pointer;
   }
 
+  .file-ico {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--color-text-tertiary);
+  }
+
+  .file-item.active .file-ico {
+    color: var(--color-primary);
+  }
+
   .file-ops {
     display: flex;
     gap: 2px;
   }
 
   .op-btn {
+    display: inline-flex;
+    align-items: center;
     font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
     background: transparent;
     border: none;
     padding: 0 var(--space-1);
     cursor: pointer;
-    opacity: 0.5;
+    border-radius: var(--radius-sm);
   }
 
   .op-btn:hover {
-    opacity: 1;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface);
+  }
+
+  .op-btn.danger:hover {
+    color: var(--color-danger);
   }
 
   .rename-input {

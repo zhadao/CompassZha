@@ -18,14 +18,71 @@ use std::sync::{Mutex, OnceLock};
 
 use serde::Serialize;
 
-/// 数据根目录默认值（§3.1；config.json 的 data_root 字段可覆盖）。
-/// v4.11 去个人化：默认取「当前用户主目录下的 CompassZha」（%USERPROFILE%\CompassZha），
-/// 不写死任何开发者本机路径——分发给他人后也能在各用户机器上正常创建数据目录。
+/// 数据根目录默认值（§3.3 v4.22 运行形态）：
+/// 1) 可执行文件同级存在 `portable.txt`（便携版标记）→ `<exe 同级>/data`（绿色软件）；
+/// 2) 否则 `%APPDATA%\CompassZha`（平台标准路径）；
+/// 3) 若 (2) 不存在而历史默认根 `%USERPROFILE%\CompassZha` 存在 → **幂等复制**（源保留作为备份）。
+/// 最终仍可被目标根下 config.json 的 `data_root` 字段覆盖。
 fn default_data_root() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            if dir.join("portable.txt").is_file() {
+                return dir.join("data");
+            }
+        }
+    }
+    match std::env::var_os("APPDATA") {
+        Some(appdata) if !appdata.is_empty() => {
+            let target = PathBuf::from(appdata).join("CompassZha");
+            migrate_legacy_root(&target);
+            target
+        }
+        _ => legacy_data_root(),
+    }
+}
+
+/// 历史默认根（v4.11 去个人化时使用；v4.22 起仅作回落与迁移来源）。
+fn legacy_data_root() -> PathBuf {
     match std::env::var_os("USERPROFILE") {
         Some(home) if !home.is_empty() => PathBuf::from(home).join("CompassZha"),
         _ => PathBuf::from("CompassZha"),
     }
+}
+
+/// 幂等迁移：目标根不存在、且历史根存在 → 递归复制（只增不覆盖；**源保留不删**）。
+/// 已存在则直接返回（重复执行无副作用）。
+fn migrate_legacy_root(target: &Path) {
+    if target.exists() {
+        return;
+    }
+    let legacy = legacy_data_root();
+    if !legacy.is_dir() || legacy == target {
+        return;
+    }
+    if let Err(e) = copy_tree(&legacy, target) {
+        eprintln!("[bootstrap] 历史数据迁移失败（不影响启动）：{e}");
+    } else {
+        println!(
+            "[bootstrap] 已将历史数据从 {} 复制到 {}（源保留为备份）",
+            legacy.display(),
+            target.display()
+        );
+    }
+}
+
+/// 递归复制目录（已存在的文件不覆盖）。
+fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let to = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_tree(&entry.path(), &to)?;
+        } else if !to.exists() {
+            fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
 }
 
 /// 目录条目（fs_list_dir 返回；目录优先、名称排序）。
@@ -84,10 +141,18 @@ pub fn bootstrap() {
     }
     let root = data_root();
 
-    // 2. 基础目录（§3.1；已存在则无操作）。v4.4：corpus 为统一大库，不按主题分子目录
-    for dir in ["daily", "life", "corpus"] {
+    // 2. 基础目录（§3.1 v4.22 审查后定稿：每类数据唯一归属一个顶层目录）。v4.4：corpus 为统一大库，不按主题分子目录
+    for dir in ["daily", "life", "corpus", "events", "conversations"] {
         if let Err(e) = fs::create_dir_all(root.join(dir)) {
             eprintln!("[bootstrap] 创建目录 {dir} 失败：{e}");
+        }
+    }
+
+    // 2b. 目录说明 README.md（v4.22：幂等生成，纯说明文件、应用不读；已存在则不覆盖）
+    let readme = root.join("README.md");
+    if !readme.is_file() {
+        if let Err(e) = fs::write(&readme, DIR_README) {
+            eprintln!("[bootstrap] README.md 写入失败：{e}");
         }
     }
 
@@ -119,6 +184,23 @@ pub fn bootstrap() {
     }
 }
 
+/// §3.1 v4.22：数据根目录说明（首次启动幂等生成，已存在则不覆盖）。
+const DIR_README: &str = "# CompassZha 数据目录说明\n\
+\n\
+这是 CompassZha 的全部数据目录——所有内容都是普通 Markdown 文件，可直接用任何编辑器打开、修改、备份。\n\
+\n\
+| 目录 / 文件 | 用途 | 命名规则 |\n\
+| --- | --- | --- |\n\
+| `daily/<年>/` | 日记 + 当日日程（日历事件） | `yyyy-mm-dd.md` |\n\
+| `life/<板块名>/` | 人生板块内容（每个板块一个子文件夹，内部可放多个 md） | 文件夹名 = 板块名 |\n\
+| `events/循环事件.md` | 循环事件规则库（规则驱动，仅在近 3 个月内自动生成事件） | 固定文件名 |\n\
+| `corpus/` | 隆中对语料库（任何 md 都是语料；直接丢进本目录即可） | 自由命名 |\n\
+| `conversations/` | 隆中对对话归档（应用内「保存本轮对话」写入） | `yyyy-mm-dd_hh-mm_标题.md` |\n\
+| `config.json` | 应用设置（外观 / AI / Git / 关闭行为等） | 单文件 |\n\
+| `.backup/` | 本地快照（自动维护，不进 Git） | — |\n\
+\n\
+提示：这些文件建议通过 CompassZha 应用内编辑（会自动提交到本地 Git 仓库便于回溯）；也可在应用「设置 → 数据」中一键打开本目录。\n";
+
 /// §3.3 默认 config.json（version 5，v4.4：corpus_topics 为 RAG 标签路由，去 dir 字段）。
 /// 敏感信息（DeepSeek key 等）不入本文件（SPEC-012）。
 /// v0.2.0：默认卡补 keywords——索引卡是 AI 检索的筛选器，关键词并入检索打分。
@@ -126,6 +208,7 @@ fn default_config_json() -> String {
     let cfg = serde_json::json!({
         "version": 5,
         "data_root": "",
+        "close_behavior": "ask",
         "corpus_topics": [
             { "id": "career", "name": "职业与方向", "keywords": ["职业选择", "跳槽", "升职", "转行", "副业", "面试", "工作", "事业"] },
             { "id": "ai-tools", "name": "AI 与工具观", "keywords": ["AI", "人工智能", "工具", "效率", "软件", "大模型", "自动化"] },
@@ -333,6 +416,58 @@ pub(crate) fn run_git(root: &Path, args: &[&str]) -> Result<(), String> {
             Ok(())
         }
         Err(e) => Err(format!("git {} 无法启动：{e}", args.join(" "))),
+    }
+}
+
+/* ---- 资源管理器定位（v4.20：文件树右键「定位文件位置」，§2.9） ---- */
+
+/// 在资源管理器中定位并选中 dataRoot 下的文件（explorer /select,<绝对路径>）。
+/// 异步执行（性能红线：全 command 异步）；Windows 下 CREATE_NO_WINDOW 防黑窗闪烁。
+#[tauri::command(async)]
+pub fn fs_reveal(rel: String) -> Result<(), String> {
+    let path = resolve(&rel)?;
+    if !path.exists() {
+        return Err("文件不存在".to_string());
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(|e| format!("打开资源管理器失败：{e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("仅支持 Windows".into())
+    }
+}
+
+/* ---- 数据根目录（v4.22：设置页 / 侧栏「打开数据目录」，§3.1） ---- */
+
+/// 在资源管理器中打开数据根目录（非「定位选中文件」——那是 fs_reveal）。
+/// 异步执行；Windows 下 CREATE_NO_WINDOW 防黑窗闪烁。
+#[tauri::command(async)]
+pub fn open_data_root() -> Result<(), String> {
+    let root = data_root();
+    if let Err(e) = fs::create_dir_all(&root) {
+        return Err(format!("数据目录创建失败：{e}"));
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(root.as_os_str())
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(|e| format!("打开数据目录失败：{e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = root;
+        Err("仅支持 Windows".into())
     }
 }
 

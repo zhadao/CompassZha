@@ -2,15 +2,17 @@
   import { app } from "../../stores/app.svelte";
   import type { SectionId } from "../../types/schema";
   import FileTree from "./FileTree.svelte";
+  import SidebarFoot from "./SidebarFoot.svelte";
+  import Icon from "../common/Icon.svelte";
 
   const NAV: Array<{ id: SectionId; label: string; icon: string }> = [
-    { id: "today", label: "今日", icon: "📅" },
-    { id: "calendar", label: "日历", icon: "📆" },
-    { id: "dashboard", label: "仪表盘", icon: "📊" },
-    { id: "life", label: "人生板块", icon: "🧭" },
-    { id: "pomodoro", label: "番茄钟", icon: "🍅" },
-    { id: "chat", label: "语料对话", icon: "💬" },
-    { id: "settings", label: "设置", icon: "⚙️" },
+    { id: "today", label: "今日", icon: "today" },
+    { id: "calendar", label: "日历", icon: "calendar" },
+    { id: "dashboard", label: "仪表盘", icon: "dashboard" },
+    { id: "life", label: "人生板块", icon: "life" },
+    { id: "pomodoro", label: "番茄钟", icon: "pomodoro" },
+    { id: "chat", label: "隆中对", icon: "chat" },
+    { id: "settings", label: "设置", icon: "settings" },
   ];
 </script>
 
@@ -18,16 +20,21 @@
   <button
     class="collapse-btn"
     title={app.sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+    aria-label={app.sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
     onclick={() => (app.sidebarCollapsed = !app.sidebarCollapsed)}
   >
-    {app.sidebarCollapsed ? "»" : "«"}
+    <Icon name="collapse" size={16} />
   </button>
 
   {#if !app.sidebarCollapsed}
     <div class="brand">
-      <div class="app-name">CompassZha</div>
+      <div class="app-name">
+        <Icon name="logo" size={55} />
+        <span>CompassZha</span>
+      </div>
       <button class="today-btn" onclick={() => app.gotoSection("today")}>
-        📅 今天 · 快速进入
+        <Icon name="today" size={21} />
+        今天 · 快速进入
       </button>
     </div>
 
@@ -38,22 +45,17 @@
           class:active={app.section === item.id}
           onclick={() => app.gotoSection(item.id)}
         >
-          <span class="nav-icon">{item.icon}</span>
+          <span class="nav-icon"><Icon name={item.icon} size={27} /></span>
           <span class="nav-label">{item.label}</span>
         </button>
       {/each}
     </nav>
 
     <FileTree />
-
-    <div class="git-status">
-      <span class="dot"></span>
-      Git 未配置
-    </div>
   {:else}
     <div class="brand-collapsed">
       <button class="today-btn icon-only" title="今天" onclick={() => app.gotoSection("today")}>
-        📅
+        <Icon name="today" size={27} />
       </button>
       {#each NAV as item (item.id)}
         <button
@@ -62,12 +64,13 @@
           title={item.label}
           onclick={() => app.gotoSection(item.id)}
         >
-          {item.icon}
+          <Icon name={item.icon} size={27} />
         </button>
       {/each}
     </div>
-    <div class="git-status-collapsed"><span class="dot"></span></div>
   {/if}
+
+  <SidebarFoot collapsed={app.sidebarCollapsed} />
 </aside>
 
 <style>
@@ -87,23 +90,31 @@
     width: var(--sidebar-width-collapsed);
   }
 
+  /* v4.20：展开/收拢角标 = 用户自绘「箭头.svg」16px，文档流独立首行（chip 样式），
+     与品牌 LOGO 清晰区隔不堆叠；收拢态镜像朝右（提示可展开） */
   .collapse-btn {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 28px;
+    margin: var(--space-2) auto var(--space-1);
+    padding: 0;
+    flex-shrink: 0;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-md);
-    padding: var(--space-1);
-    z-index: 1;
+    background-color: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .sidebar.collapsed .collapse-btn {
-    right: 50%;
-    transform: translateX(50%);
+  .sidebar.collapsed .collapse-btn :global(svg) {
+    transform: scaleX(-1);
   }
 
   .collapse-btn:hover {
     color: var(--color-text-primary);
+    border-color: var(--color-primary);
   }
 
   .brand {
@@ -112,17 +123,23 @@
   }
 
   .app-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-size: var(--font-size-lg);
     font-weight: 700;
-    color: var(--color-primary);
+    color: var(--color-title);
     margin-bottom: var(--space-2);
   }
 
   .today-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     width: 100%;
     text-align: left;
     background-color: var(--color-primary-light);
-    color: var(--color-primary);
+    color: var(--color-title);
     border-radius: var(--radius-sm);
     padding: var(--space-1) var(--space-2);
     font-size: var(--font-size-sm);
@@ -131,7 +148,7 @@
 
   .today-btn:hover {
     background-color: var(--color-primary);
-    color: var(--color-surface);
+    color: var(--color-primary-contrast);
   }
 
   .nav {
@@ -159,33 +176,13 @@
 
   .nav-item.active {
     background-color: var(--color-primary-light);
-    color: var(--color-primary);
+    color: var(--color-title);
     font-weight: 600;
   }
 
-  .git-status {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-top: 1px solid var(--color-border);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-tertiary);
-  }
-
-  .git-status .dot,
-  .git-status-collapsed .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: var(--color-muted);
-  }
-
-  .git-status-collapsed {
-    display: flex;
-    justify-content: center;
-    padding: var(--space-2);
-    border-top: 1px solid var(--color-border);
+  .nav-icon {
+    display: inline-flex;
+    line-height: 0;
   }
 
   .brand-collapsed {

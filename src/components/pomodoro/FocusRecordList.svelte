@@ -38,7 +38,6 @@
       {/each}
     </ul>
   {/if}
-  <p class="tip">每条记录实时追加到当日日记的「## 专注记录」章节，并累加 frontmatter 的 focus_minutes（500ms 防抖落盘 + 本地 git 提交）。</p>
 </section>
 
 <style>
@@ -104,9 +103,4 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .tip {
-    margin-top: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-tertiary);
-  }
 </style>

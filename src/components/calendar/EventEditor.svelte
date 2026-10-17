@@ -1,11 +1,18 @@
 <script lang="ts">
   /**
    * 日历事件编辑器（右栏）：新建 / 编辑共用，操作 app.calendarDraft。
+   * v4.21：「重复」区（RecurrenceFields）开启即保存为循环规则（§2.10），关闭即普通单次事件；
+   * 删除事件先弹「确认删除？」防误删。
    */
   import { app } from "../../stores/app.svelte";
+  import ConfirmDialog from "../common/ConfirmDialog.svelte";
+  import RecurrenceFields from "./RecurrenceFields.svelte";
 
   const draft = $derived(app.calendarDraft);
   const isEdit = $derived(draft?.mode === "edit");
+  const isRule = $derived(!!draft?.repeat);
+
+  let confirmDel = $state(false);
 
   function setTitle(v: string): void {
     if (draft) draft.title = v;
@@ -26,7 +33,9 @@
 
 <div class="editor">
   {#if draft}
-    <h3 class="editor-title">{isEdit ? "编辑事件" : "新建事件"}</h3>
+    <h3 class="editor-title">
+      {isRule ? (isEdit ? "编辑循环规则" : "新建循环事件") : isEdit ? "编辑事件" : "新建事件"}
+    </h3>
     <form
       class="form"
       onsubmit={(e) => {
@@ -44,7 +53,7 @@
         />
       </label>
       <label class="field">
-        <span class="label">日期</span>
+        <span class="label">{isRule ? "开始日期（从此日开始循环）" : "日期"}</span>
         <input
           type="date"
           value={draft.date}
@@ -79,6 +88,9 @@
           </label>
         </div>
       {/if}
+
+      <RecurrenceFields />
+
       <div class="actions">
         <button class="btn-primary" type="submit" disabled={!draft.title.trim()}>
           保存
@@ -91,7 +103,7 @@
           取消
         </button>
         {#if isEdit}
-          <button class="btn-danger" type="button" onclick={() => app.deleteSelected()}>
+          <button class="btn-danger" type="button" onclick={() => (confirmDel = true)}>
             删除
           </button>
         {/if}
@@ -104,6 +116,18 @@
     </div>
   {/if}
 </div>
+
+{#if confirmDel}
+  <ConfirmDialog
+    text={isRule ? "确认删除整条循环规则？已生成的事件将一并清除。" : "确认删除该事件？"}
+    confirmLabel="删除"
+    onConfirm={() => {
+      app.deleteSelected();
+      confirmDel = false;
+    }}
+    onCancel={() => (confirmDel = false)}
+  />
+{/if}
 
 <style>
   .editor-title {

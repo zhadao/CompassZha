@@ -16,12 +16,13 @@ import type {
   EventItem,
   FocusSession,
   LifeBoard,
+  RecurRule,
   SectionId,
   TimerState,
 } from "../types/schema";
 import { emptyMetrics } from "../types/schema";
 import { genId } from "../mock/preview";
-import { addHours, offsetDays, todayKey } from "../lib/date";
+import { addHours, fromDateKey, offsetDays, todayKey } from "../lib/date";
 import {
   type ParsedDaily,
   type GoalStats,
@@ -39,7 +40,10 @@ import {
   renameGoalTag,
   parseGoalStats,
   buildGoalStats,
+  parseRecurringRules,
+  buildRecurringRules,
 } from "../lib/markdown";
+import { addMonthsKey, occurrencesBetween } from "../lib/recurrence";
 import {
   persist,
   fsRead,
@@ -53,6 +57,12 @@ import {
   dailyRel,
   boardDefaultRel,
 } from "../lib/tauri-fs";
+import {
+  conversationRel,
+  slugTitle,
+  toConversationMd,
+  type ChatBubble,
+} from "../lib/chat-export";
 
 /** 当前时刻 HH:mm（番茄钟开始时刻 / 提交信息用） */
 function nowHHmm(): string {
@@ -92,9 +102,13 @@ class AppState {
   dailyNotes = $state<Record<string, DailyNote>>({});
   /** 日历事件（v4.4 已接真：写回当日 ## 日程 章节） */
   events = $state<EventItem[]>([]);
+  /** 循环事件规则（v4.21 §2.10：events/循环事件.md，规则驱动懒物化） */
+  recurRules = $state<RecurRule[]>([]);
 
   /* ---- 人生板块（板块 = life/ 下子文件夹；v4.5：文件夹内含多 Markdown 文件） ---- */
   lifeBoards = $state<LifeBoard[]>([]);
+  /** 座右铭（v4.20 §2.5）：life/座右铭.md，每行一条；life/ 根下散文件，板块扫描「仅子文件夹」自动跳过 */
+  mottos = $state<string[]>([]);
   /** 板块投入历史存档（v4.9：life/goal-stats.md；仅改过名/删过的板块有记录） */
   goalStats = $state<GoalStats>({});
   /** 板块删除后的提示横幅（v4.9：告知历史数据保留位置；null = 不显示） */
@@ -204,7 +218,7 @@ class AppState {
       const dirs = await fsListDir("life").catch(() => []);
       for (const d of dirs) {
         if (!d.is_dir) continue;
-        let icon = "🧭";
+        let icon = "svg:点子";
         const files: BoardFile[] = [];
         const entries = await fsListDir(`life/${d.name}`).catch(() => []);
         for (const e of entries) {
@@ -225,6 +239,18 @@ class AppState {
       // v4.9：板块投入历史存档（文件缺失 = 尚无板块改名/删除过，空表起步）
       const statsText = await fsRead("life/goal-stats.md").catch(() => null);
       this.goalStats = statsText ? parseGoalStats(statsText) : {};
+      // v4.20：座右铭（life/座右铭.md 每行一条；缺文件 = 空态起步）
+      const mottoText = await fsRead("life/座右铭.md").catch(() => null);
+      this.mottos = mottoText
+        ? mottoText
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l.length > 0)
+        : [];
+      // v4.21：循环事件规则库（events/循环事件.md；缺文件 = 无规则）→ 懒物化窗口内实例
+      const ruleText = await fsRead("events/循环事件.md").catch(() => null);
+      this.recurRules = ruleText ? parseRecurringRules(ruleText) : [];
+      this.materializeRecurrences();
       this.loaded = true;
     } catch (err) {
       console.error("[loadAll] 数据装载失败", err);
@@ -454,8 +480,8 @@ class AppState {
 
   /* ---- 日历编辑器草稿操作 ---- */
 
-  /** 点击日历空白处：打开新建草稿 */
-  openCreateDraft(date: string, allDay: boolean, startHHmm = "09:00"): void {
+  /** 点击日历空白处 / 右键「添加事件」「添加循环事件」：打开新建草稿 */
+  openCreateDraft(date: string, allDay: boolean, startHHmm = "09:00", repeat = false): void {
     this.calendarDraft = {
       mode: "create",
       title: "",
@@ -463,23 +489,58 @@ class AppState {
       allDay,
       start: allDay ? "" : startHHmm,
       end: allDay ? "" : addHours(startHHmm, 1),
+      repeat: repeat
+        ? { freq: "weekly", interval: 1, weekdays: [fromDateKey(date).getDay()], endDate: null }
+        : null,
     };
     this.selectedEventId = null;
   }
 
-  /** 点击已有事件：打开编辑草稿 */
+  /** 点击已有事件：打开编辑草稿（循环实例 → 载入其规则，「重复」区默认开启） */
   openEditDraft(id: string): void {
     const e = this.events.find((x) => x.id === id);
     if (!e) return;
     this.selectedEventId = id;
+    const rule = e.ruleId ? this.recurRules.find((r) => r.id === e.ruleId) : undefined;
     this.calendarDraft = {
       mode: "edit",
       id,
       title: e.title,
-      date: e.date,
+      date: rule ? rule.start_date : e.date,
       allDay: e.start === null,
       start: e.start ?? "",
       end: e.end ?? "",
+      repeat: rule
+        ? {
+            ruleId: rule.id,
+            freq: rule.freq,
+            interval: rule.interval,
+            weekdays: [...rule.weekdays],
+            endDate: rule.end_date,
+          }
+        : null,
+    };
+  }
+
+  /** 循环事件管理弹窗「编辑」：按规则 id 打开编辑草稿（复用事件编辑器「重复」区） */
+  openEditRuleDraft(ruleId: string): void {
+    const r = this.recurRules.find((x) => x.id === ruleId);
+    if (!r) return;
+    this.selectedEventId = null;
+    this.calendarDraft = {
+      mode: "edit",
+      title: r.title,
+      date: r.start_date,
+      allDay: r.start === null,
+      start: r.start ?? "",
+      end: r.end ?? "",
+      repeat: {
+        ruleId: r.id,
+        freq: r.freq,
+        interval: r.interval,
+        weekdays: [...r.weekdays],
+        endDate: r.end_date,
+      },
     };
   }
 
@@ -490,8 +551,28 @@ class AppState {
   saveDraft(): void {
     const d = this.calendarDraft;
     if (!d || !d.title.trim()) return;
+    const title = d.title.trim();
+    // 重复区开启 → 保存「规则」（并按懒物化补齐窗口内实例），不落单次事件
+    if (d.repeat) {
+      const prev = d.repeat.ruleId ? this.recurRules.find((r) => r.id === d.repeat?.ruleId) : undefined;
+      this.upsertRecurRule({
+        id: d.repeat.ruleId ?? genId("r"),
+        title,
+        freq: d.repeat.freq,
+        interval: Math.max(1, Math.floor(d.repeat.interval || 1)),
+        weekdays: d.repeat.freq === "weekly" ? [...d.repeat.weekdays].sort((a, b) => a - b) : [],
+        start_date: d.date,
+        end_date: d.repeat.endDate,
+        start: d.allDay ? null : d.start,
+        end: d.allDay ? null : d.end,
+        except: prev ? [...prev.except] : [],
+        materialized: [],
+      });
+      this.calendarDraft = null;
+      return;
+    }
     const item = {
-      title: d.title.trim(),
+      title,
       date: d.date,
       start: d.allDay ? null : d.start,
       end: d.allDay ? null : d.end,
@@ -499,14 +580,137 @@ class AppState {
     if (d.mode === "create") {
       this.addEvent({ ...item, source: "manual" });
     } else if (d.id) {
+      const existing = this.events.find((e) => e.id === d.id);
+      // 原本是循环实例、用户关掉了「重复」→ 删除该规则，实例全部转为普通单次事件
+      if (existing?.ruleId) this.removeRecurRule(existing.ruleId, false);
       this.updateEvent(d.id, item);
     }
     this.calendarDraft = null;
   }
 
   deleteSelected(): void {
+    const d = this.calendarDraft;
+    // 编辑器「删除」作用在规则上时 → 删除整条循环（含已生成实例）
+    if (d?.repeat?.ruleId) {
+      this.removeRecurRule(d.repeat.ruleId, true);
+      this.calendarDraft = null;
+      return;
+    }
     if (this.selectedEventId) this.removeEvent(this.selectedEventId);
     this.calendarDraft = null;
+  }
+
+  /* ---- 循环事件（v4.21 §2.10：规则驱动懒物化，不污染远期磁盘） ---- */
+
+  /** 规则库落盘 + 本地提交（规则增删改后调用） */
+  private async saveRecurRulesFile(msg: string): Promise<void> {
+    if (!persist) return;
+    try {
+      await fsWrite("events/循环事件.md", buildRecurringRules(this.recurRules));
+      await gitAutoCommit(msg);
+    } catch (err) {
+      console.error("[saveRecurRules] 落盘失败", err);
+    }
+  }
+
+  /**
+   * 懒物化：窗口 = [今天, 今天 + 3 个月]。只生成窗口内、不在 except、尚无同名实例的日期；
+   * 同步清理窗口内已不属于新规则的旧实例（规则改动 / 窗口向前滚动）。远期日期不创建任何文件。
+   */
+  materializeRecurrences(): void {
+    const today = todayKey();
+    const winEnd = addMonthsKey(today, 3);
+    let changed = false;
+    for (const rule of this.recurRules) {
+      const occ = occurrencesBetween(rule, today, winEnd);
+      const occSet = new Set(occ);
+      // 1) 清理不再属于本规则窗口的已生成实例
+      for (const e of [...this.events]) {
+        if (e.ruleId !== rule.id || e.date < today || occSet.has(e.date)) continue;
+        this.events = this.events.filter((x) => x.id !== e.id);
+        if (this.selectedEventId === e.id) this.selectedEventId = null;
+        this.markDirty(e.date, "schedules");
+        changed = true;
+      }
+      // 2) 同步窗口内实例：已有 → 跟随规则更新标题/时间；缺失 → 补齐（跳过 except / 同名手工事件）
+      for (const date of occ) {
+        if (rule.except.includes(date)) continue;
+        const existing = this.events.find((e) => e.date === date && e.ruleId === rule.id);
+        if (existing) {
+          if (existing.title !== rule.title || existing.start !== rule.start || existing.end !== rule.end) {
+            existing.title = rule.title;
+            existing.start = rule.start;
+            existing.end = rule.end;
+            this.markDirty(date, "schedules");
+            changed = true;
+          }
+          continue;
+        }
+        if (this.events.some((e) => e.date === date && e.title === rule.title)) continue;
+        this.events.push({
+          id: genId("evt"),
+          title: rule.title,
+          date,
+          start: rule.start,
+          end: rule.end,
+          source: "manual",
+          ruleId: rule.id,
+        });
+        this.markDirty(date, "schedules");
+        changed = true;
+      }
+      rule.materialized = [...occ].sort();
+    }
+    if (changed) this.events = [...this.events]; // 整体重赋触发日历事件源重建
+  }
+
+  /** 新建 / 更新一条规则（编辑器「重复」区保存、管理弹窗编辑），并立即物化 + 落盘 */
+  upsertRecurRule(rule: RecurRule): void {
+    const i = this.recurRules.findIndex((r) => r.id === rule.id);
+    if (i >= 0) this.recurRules[i] = rule;
+    else this.recurRules.push(rule);
+    this.materializeRecurrences();
+    void this.saveRecurRulesFile(`更新循环事件规则：${rule.title} · ${nowHHmm()}`);
+  }
+
+  /**
+   * 删除规则。deleteInstances=true → 已生成实例一并删除；
+   * false → 实例保留并转为普通单次事件（剥离 ruleId，下次落盘即去掉机器后缀）。
+   */
+  removeRecurRule(id: string, deleteInstances: boolean): void {
+    const rule = this.recurRules.find((r) => r.id === id);
+    this.recurRules = this.recurRules.filter((r) => r.id !== id);
+    const kept: EventItem[] = [];
+    const affected = new Set<string>();
+    for (const e of this.events) {
+      if (e.ruleId !== id) {
+        kept.push(e);
+        continue;
+      }
+      affected.add(e.date);
+      if (deleteInstances) {
+        if (this.selectedEventId === e.id) this.selectedEventId = null;
+      } else {
+        const copy: EventItem = { ...e };
+        delete copy.ruleId;
+        kept.push(copy);
+      }
+    }
+    this.events = kept;
+    for (const d of affected) this.markDirty(d, "schedules");
+    if (this.calendarDraft?.repeat?.ruleId === id) this.calendarDraft = null;
+    void this.saveRecurRulesFile(
+      `${deleteInstances ? "删除循环事件规则及已生成实例" : "删除循环事件规则（保留已生成实例）"}：${rule?.title ?? id} · ${nowHHmm()}`,
+    );
+  }
+
+  /** 右键循环实例「删除本次」：删除该日实例并记入 except（重生成时跳过） */
+  removeOccurrence(ruleId: string, date: string): void {
+    const target = this.events.find((e) => e.ruleId === ruleId && e.date === date);
+    if (target) this.removeEvent(target.id);
+    const rule = this.recurRules.find((r) => r.id === ruleId);
+    if (rule && !rule.except.includes(date)) rule.except.push(date);
+    void this.saveRecurRulesFile(`删除循环事件本次：${rule?.title ?? ruleId} ${date} · ${nowHHmm()}`);
   }
 
   /* ---- 人生板块操作（板块 = life/<板块名>/ 文件夹，内含多 Markdown 文件，v4.5） ---- */
@@ -665,6 +869,13 @@ class AppState {
   private async saveGoalStats(): Promise<void> {
     if (!persist) return;
     await fsWrite("life/goal-stats.md", buildGoalStats(this.goalStats));
+  }
+
+  /** 保存座右铭（v4.20 §2.5）：每行一条落盘 life/座右铭.md（内存先行；浏览器预览仅内存态） */
+  async saveMottos(list: string[]): Promise<void> {
+    this.mottos = list;
+    if (!persist) return;
+    await fsWrite("life/座右铭.md", list.length > 0 ? list.join("\n") + "\n" : "");
   }
 
   /** 新建板块内 Markdown 文件（自动补 .md 后缀；同名拒绝；创建后选中） */
@@ -1019,6 +1230,20 @@ class AppState {
   toggleDetail(): void {
     this.detailHidden = !this.detailHidden;
     this.detailVisible = this.winWidth >= 1280 && !this.detailHidden;
+  }
+
+  /**
+   * v4.22 §2.12：把隆中对本轮对话归档为 Markdown（conversations/yyyy-mm-dd_hh-mm_标题.md）。
+   * 返回落盘相对路径（ChatPage 提示 +「打开所在文件夹」用）；浏览器预览态或无消息返回 null。
+   */
+  async saveConversation(bubbles: ChatBubble[], model: string): Promise<string | null> {
+    if (!persist || bubbles.length === 0) return null;
+    const at = new Date();
+    const title = slugTitle(bubbles);
+    const rel = conversationRel(title, at);
+    await fsWrite(rel, toConversationMd(bubbles, model, at));
+    await gitAutoCommit(`保存对话：${title} · ${nowHHmm()}`);
+    return rel;
   }
 }
 

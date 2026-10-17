@@ -1,62 +1,201 @@
 /* ============================================================
  * CompassZha 设计 tokens（CODE-006：组件只允许引用本文件变量）
- * 风格对标 usememos/memos：浅色中性背景、白底圆角卡片、
- * 细边框、单一强调色、充足留白。
- * 状态：原型首版，待用户截图确认后冻结。
+ * v4.17 外观系统：GitHub 式理性风——大面积黑白灰中性色，
+ * 主题色仅用于标题/强调/选中态/高亮。
+ *
+ * 颜色纪律：一切颜色出自《颜色与美术资源/color规范/color.md》
+ * 色卡（红/黄/绿/蓝 4 组 × 21 档；蓝为默认）+ 中性黑白灰。
+ * 双维主题：<html data-color-mode="light|dark"> × data-accent="blue|red|yellow|green"
+ * 明暗自适应（用户定稿 1C）：
+ *   浅色标题/强调 = 主题色加深档（d50）；深色 = 提亮档（l30）；
+ *   品牌强调色（主按钮/选中/链接）= 0% 基础色。
  * ============================================================ */
 
+/* ---- 主题色组原始色板（--accent-0 基础 / lNN 提亮档 / dNN 加深档） ---- */
+
+:root,
+[data-accent="blue"] {
+  --accent-0: #1761b9;
+  --accent-l10: #2e71c0;
+  --accent-l30: #5d90ce;
+  --accent-l60: #a2c0e3;
+  --accent-l70: #b9d0ea;
+  --accent-l80: #d1dff1;
+  --accent-l90: #e8eff8;
+  --accent-d10: #1557a7;
+  --accent-d50: #0c315d;
+  --accent-d70: #071d38;
+  --accent-d90: #020a12;
+  /* 主色上的文字（浅色底用深字：色卡端点/加深档） */
+  --accent-on: #ffffff;
+}
+
+[data-accent="red"] {
+  --accent-0: #f6beca;
+  --accent-l10: #f7c5cf;
+  --accent-l30: #f9d2da;
+  --accent-l60: #fbe5ea;
+  --accent-l70: #fcecef;
+  --accent-l80: #fdf2f4;
+  --accent-l90: #fef9fa;
+  --accent-d10: #ddabb6;
+  --accent-d50: #7b5f65;
+  --accent-d70: #4a393d;
+  --accent-d90: #191314;
+  --accent-on: #191314;
+}
+
+[data-accent="yellow"] {
+  --accent-0: #ebd014;
+  --accent-l10: #edd52b;
+  --accent-l30: #f1de5b;
+  --accent-l60: #f7eca1;
+  --accent-l70: #f9f1b9;
+  --accent-l80: #fbf6d0;
+  --accent-l90: #fdfae8;
+  --accent-d10: #d4bb12;
+  --accent-d50: #76680a;
+  --accent-d70: #473e06;
+  --accent-d90: #171502;
+  --accent-on: #171502;
+}
+
+[data-accent="green"] {
+  --accent-0: #5ab002;
+  --accent-l10: #6bb81b;
+  --accent-l30: #8cc84e;
+  --accent-l60: #bddf9a;
+  --accent-l70: #cee7b3;
+  --accent-l80: #deefcc;
+  --accent-l90: #eff7e6;
+  --accent-d10: #519e02;
+  --accent-d50: #2d5801;
+  --accent-d70: #1b3501;
+  --accent-d90: #091200;
+  --accent-on: #ffffff;
+}
+
+/* ---- 语义映射：浅色模式 ---- */
+
 :root {
-  /* ---- 色板 ---- */
-  /* 主色：克制使用的单一强调色（选中态 / 主按钮 / 链接） */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-light: #dbeafe;
+  color-scheme: light;
 
-  /* 背景：浅色中性 */
-  --color-bg: #f6f7f9;
-  /* 卡片 / 面板背景 */
+  /* 主题色语义 */
+  --color-primary: var(--accent-0);
+  --color-primary-hover: var(--accent-d10);
+  --color-primary-light: var(--accent-l80);
+  --color-primary-contrast: var(--accent-on);
+  /* v4.19 日历当日列/选取高亮专用淡主题色底（与全站 primary-light 分离，避免影响事件卡/热力图） */
+  --color-primary-tint: color-mix(in srgb, var(--accent-0) 12%, var(--color-surface));
+  --color-title: var(--accent-d50);
+  --color-focus-ring: var(--accent-l60);
+
+  /* 中性色（GitHub Primer 浅色） */
+  --color-bg: #f6f8fa;
   --color-surface: #ffffff;
-  /* 次级表面（输入框底、悬浮层） */
-  --color-surface-alt: #f1f2f4;
+  --color-surface-alt: #eef1f4;
+  --color-text-primary: #1f2328;
+  --color-text-secondary: #59636e;
+  --color-text-tertiary: #818b98;
+  --color-border: #d1d9e0;
+  --color-border-strong: #9198a1;
 
-  /* 文字三级色 */
-  --color-text-primary: #1f2329;
-  --color-text-secondary: #646a73;
-  --color-text-tertiary: #8f959e;
+  /* 语义色（文字 = 各组加深档；底色 = 各组提亮档） */
+  --color-success: #366a01;
+  --color-success-bg: #eff7e6;
+  --color-warning: #8d7d0c;
+  --color-warning-bg: #fdfae8;
+  --color-danger: #624c51;
+  --color-danger-bg: #fdf2f4;
+  --color-muted: #818b98;
 
-  /* 边框 */
-  --color-border: #e3e5e8;
-  --color-border-strong: #c9ccd0;
+  /* 阴影（四级，subtle） */
+  --shadow-1: 0 1px 2px rgba(31, 35, 40, 0.06);
+  --shadow-2: 0 1px 3px rgba(31, 35, 40, 0.1), 0 1px 2px rgba(31, 35, 40, 0.08);
+  --shadow-3: 0 4px 12px rgba(31, 35, 40, 0.12);
+  --shadow-4: 0 8px 24px rgba(31, 35, 40, 0.16);
 
-  /* 语义色 */
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
-  --color-muted: #9ca3af;
+  /* 遮罩 */
+  --color-overlay: rgba(31, 35, 40, 0.5);
+}
 
-  /* ---- 字号（五档） ---- */
+/* ---- 语义映射：深色模式 ---- */
+
+[data-color-mode="dark"] {
+  color-scheme: dark;
+
+  /* 主题色语义：深色用 0% 基础色 + 提亮档 */
+  --color-primary: var(--accent-0);
+  --color-primary-hover: var(--accent-l10);
+  --color-primary-light: var(--accent-d70);
+  --color-primary-contrast: var(--accent-on);
+  /* v4.19 深色下当日列淡主题色底（26% 主题色 + surface，黄/红等提亮档在深色下发乌故用混色） */
+  --color-primary-tint: color-mix(in srgb, var(--accent-0) 26%, var(--color-surface));
+  --color-title: var(--accent-l30);
+  --color-focus-ring: var(--accent-l70);
+
+  /* 中性色（GitHub Primer 深色） */
+  --color-bg: #0d1117;
+  --color-surface: #151b23;
+  --color-surface-alt: #1f2630;
+  --color-text-primary: #f0f6fc;
+  --color-text-secondary: #9198a1;
+  --color-text-tertiary: #6e7681;
+  --color-border: #3d444d;
+  --color-border-strong: #5c6673;
+
+  /* 语义色：文字提亮档，底色加深档 */
+  --color-success: #8cc84e;
+  --color-success-bg: #122300;
+  --color-warning: #f1de5b;
+  --color-warning-bg: #2f2a04;
+  --color-danger: #f9d2da;
+  --color-danger-bg: #312628;
+  --color-muted: #6e7681;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-4: 0 8px 24px rgba(0, 0, 0, 0.65);
+
+  --color-overlay: rgba(1, 4, 9, 0.65);
+}
+
+/* ---- 字号（六档） ---- */
+:root {
   --font-size-xs: 12px;
   --font-size-sm: 13px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
   --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+}
 
-  /* ---- 间距（四档） ---- */
+/* ---- 间距 ---- */
+:root {
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 16px;
   --space-4: 24px;
+  --space-5: 32px;
+}
 
-  /* ---- 圆角 ---- */
+/* ---- 圆角 ---- */
+:root {
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+}
 
-  /* ---- 布局固定尺寸（UI-001：三栏固定，不可拖拽） ---- */
+/* ---- 布局固定尺寸（UI-001：三栏固定，不可拖拽） ---- */
+:root {
   --sidebar-width: 200px;
   --sidebar-width-collapsed: 56px;
   --detail-width: 280px;
+}
 
-  /* ---- 过渡 ---- */
+/* ---- 过渡 ---- */
+:root {
   --transition-fast: 120ms ease;
+  --transition-slow: 240ms ease;
 }

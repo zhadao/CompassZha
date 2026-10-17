@@ -2,11 +2,15 @@
   /**
    * 右侧详情栏：随分区切换显示对应内容（宽度 280px，可隐藏）。
    * v4.1：指标口径 8 项 + 趋势范围（7/30/90 天）真切换 + 板块摘要联动 + 番茄钟统计实时派生。
+   * v4.17：趋势范围/编辑模式切换统一为 Segmented 分段选择器；板块图标走自绘 SVG（emoji 回退）。
    */
   import { app } from "../../stores/app.svelte";
+  import Segmented from "../common/Segmented.svelte";
+  import BoardIcon from "../common/BoardIcon.svelte";
   import MetricsForm from "../today/MetricsForm.svelte";
   import DiaryCalendar from "../today/DiaryCalendar.svelte";
   import EventEditor from "../calendar/EventEditor.svelte";
+  import RecurringRulesDialog from "../calendar/RecurringRulesDialog.svelte";
   import { offsetDays, todayKey } from "../../lib/date";
 
   /** 选中板块（网格态点卡片联动，编辑态自动选中该板块） */
@@ -24,6 +28,12 @@
     ["心情", "frontmatter mood，1-5 整数"],
     ["专注时长", "focus_minutes，番茄钟记录自动累加"],
     ["运动步数", "frontmatter steps，单位步"],
+  ];
+
+  const TREND_OPTIONS = [
+    { value: "7", label: "近 7 天" },
+    { value: "30", label: "近 30 天" },
+    { value: "90", label: "近 90 天" },
   ];
 
   /** 本周周一的日期键（周一为一周起点） */
@@ -45,25 +55,45 @@
       .reduce((sum, s) => sum + s.minutes, 0);
   });
   const doneCount = $derived(app.focusSessions.length);
+
+  /** v4.21：循环事件管理弹窗开关 */
+  let showRules = $state(false);
 </script>
 
 <aside class="detail">
   {#if app.section === "today"}
     <section class="panel-block">
       <h3 class="panel-title">编辑模式</h3>
-      <button class="btn-primary mode-btn" onclick={() => app.toggleEditorMode()}>
-        {app.editorMode ? "返回 GUI 模式" : "切换到编辑器模式"}
-      </button>
+      <Segmented
+        ariaLabel="编辑模式"
+        options={[
+          { value: "gui", label: "GUI 表单" },
+          { value: "editor", label: "编辑器" },
+        ]}
+        value={app.editorMode ? "editor" : "gui"}
+        onchange={(v) => {
+          if ((v === "editor") !== app.editorMode) app.toggleEditorMode();
+        }}
+      />
       <p class="tip">
         {app.editorMode
           ? "编辑器模式：当日章节正文所见即所得；指标仍在下方表单。"
-          : "GUI 模式：表单化编辑；点按钮切到 Markdown 编辑器模式。"}
+          : "GUI 模式：表单化编辑；可切到 Markdown 编辑器模式。"}
       </p>
     </section>
     <DiaryCalendar />
     <MetricsForm />
   {:else if app.section === "calendar"}
     <EventEditor />
+    <section class="panel-block">
+      <h3 class="panel-title">循环事件</h3>
+      <button class="btn-secondary rules-btn" onclick={() => (showRules = true)}>
+        循环事件
+      </button>
+      <p class="tip">
+        管理全部循环事件规则：逐条查看、编辑或删除（删除时可二选一保留 / 清除已生成事件）。
+      </p>
+    </section>
   {:else if app.section === "dashboard"}
     <section class="panel-block">
       <h3 class="panel-title">指标口径说明</h3>
@@ -78,42 +108,19 @@
     </section>
     <section class="panel-block">
       <h3 class="panel-title">时间范围</h3>
-      <div class="range-row">
-        <label>
-          <input
-            type="radio"
-            name="range"
-            checked={app.trendRange === 7}
-            onchange={() => (app.trendRange = 7)}
-          />
-          近 7 天
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="range"
-            checked={app.trendRange === 30}
-            onchange={() => (app.trendRange = 30)}
-          />
-          近 30 天
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="range"
-            checked={app.trendRange === 90}
-            onchange={() => (app.trendRange = 90)}
-          />
-          近 90 天
-        </label>
-      </div>
+      <Segmented
+        ariaLabel="趋势时间范围"
+        options={TREND_OPTIONS}
+        value={String(app.trendRange)}
+        onchange={(v) => (app.trendRange = Number(v) as 7 | 30 | 90)}
+      />
       <p class="tip">切换后趋势图实时重绘</p>
     </section>
   {:else if app.section === "life"}
     <section class="panel-block">
       <h3 class="panel-title">{lifeBoard ? lifeBoard.name : "板块说明"}</h3>
       {#if lifeBoard}
-        <div class="life-icon">{lifeBoard.icon}</div>
+        <div class="life-icon"><BoardIcon icon={lifeBoard.icon} size={42} /></div>
         <p class="life-scope">
           {lifeBoard.files.length} 个文档 · 默认 {lifeBoard.name}.md
         </p>
@@ -131,12 +138,6 @@
     </section>
   {:else if app.section === "pomodoro"}
     <section class="panel-block">
-      <h3 class="panel-title">任务绑定</h3>
-      <select disabled>
-        <option>选择今日任务（阶段二接通）</option>
-      </select>
-    </section>
-    <section class="panel-block">
       <h3 class="panel-title">历史统计</h3>
       <ul class="stat-list">
         <li><span>今日专注</span><span>{todayMin} 分钟</span></li>
@@ -145,13 +146,10 @@
       </ul>
       <p class="tip">由专注记录实时汇总（当日日记「## 专注记录」+ 历史加载数据）</p>
     </section>
-  {:else}
-    <section class="panel-block">
-      <h3 class="panel-title">设置</h3>
-      <p class="tip">
-        设置项在阶段三接通：Git 同步配置、DeepSeek API key（存系统密钥链）、数据路径。
-      </p>
-    </section>
+  {/if}
+
+  {#if showRules}
+    <RecurringRulesDialog onclose={() => (showRules = false)} />
   {/if}
 </aside>
 
@@ -193,16 +191,10 @@
     margin-top: var(--space-1);
   }
 
-  .range-row {
-    display: flex;
-    gap: var(--space-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-  }
-
   .life-icon {
-    font-size: var(--font-size-xl);
+    display: inline-flex;
     margin-bottom: var(--space-2);
+    line-height: 0;
   }
 
   .life-scope {
@@ -237,7 +229,9 @@
     line-height: 1.5;
   }
 
-  .mode-btn {
+  .rules-btn {
     width: 100%;
+    padding: var(--space-2);
+    font-size: var(--font-size-sm);
   }
 </style>

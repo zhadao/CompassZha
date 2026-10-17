@@ -20,6 +20,109 @@
 
 ---
 
+## 2026-10-17 06:51 | GLM-5.3-FlashX (Trae Agent) | 任务来源：用户走查反馈「右键添加只在最上方一栏生效，要求日历视图任何地方（任何时间格、任何天的格子）右键都能唤出对应的新建/编辑/删除选单」
+
+**做了什么：**
+- 新建 `src/lib/calendarHit.ts`：右键命中三段反查（.fc-event → [data-date] 格子 → **X 坐标兜底反查最近日列**）；工具栏 / 日历网格外不弹菜单
+- CalendarPage 右键处理统一改走 `hitCalendar`（timeGrid 槽行无 data-date 祖先的场景由坐标兜底覆盖），组件行数回落至 CODE-003 红线内
+- svelte-check 0 错 0 警；headless 探针实测三位置：日期列头 ✓ 弹菜单、**时间槽 lane ✓ 弹菜单（修复前不弹）**、工具栏 ✓ 不误弹；探针文件用后即删
+
+**关键发现：**
+- 【实测】根因：FC v6 timeGrid 的槽行（.fc-timegrid-slot-lane）**没有 data-date 祖先**，旧的 `closest("[data-date]")` 反查在周视图主体区域必然失败——用户实测「右键只在顶部日期栏生效」与此完全吻合；此前探针与 browseruse 真实右键全点在列头（有 data-date），故全部「通过」未暴露该 bug
+- 【实测】排除项：合成事件 ✓、Playwright 真实右键 ✓、wry 0.57 默认 `default_context_menus=true` 且 tauri-runtime-wry 无覆盖（WebView2 contextmenu 派发无障碍）、生产/开发模式无差异嫌疑——修复方向确认在前端反查逻辑
+- 【方法论】Svelte 5 的 click 是委托事件（监听挂 document 根）：合成 click 必须 `bubbles:true` 才触发关闭，否则菜单残留导致负例误报
+
+**留下的问题 / 下一步：** 修复后 exe 重建交付，用户实测任意位置右键；拖拽循环实例改期仍不回写规则（遗留可改进项）
+
+**涉及文件：** `src/lib/calendarHit.ts`（新建）、`src/components/calendar/CalendarPage.svelte`、probe-rc.html / probe-rc.ts（验证后已删除）
+
+---
+
+## 2026-10-17 13:20 | GLM-5.3 (Trae Agent) | 任务来源：用户 v4.20 走查反馈「日历右键创建/编辑/删除事件功能没有完成（先做掉）；其次给日历加循环事件（起止/永久循环、周几循环、隔 N 天/月/年、几点或全天；只记规则、太远不创建 md、近 3 个月自动生成；右键创建 + 右栏「循环事件」按钮弹窗统一管理编辑/删除）」
+
+**做了什么：**
+- 需求文档 v4.20 → v4.21（根 + 主工程双副本同步）：新增 §2.10 循环事件章（规则存 `events/循环事件.md`、懒物化窗口 [今天, 今天+3 月]、daily/weekly/monthly/yearly 频率语义与月末 31→2 月钳制、2/29 平年钳制、except/materialized 字段）；§2.9-8 右键规范补「删除事件」二次确认与循环实例三选项；§2.9-10 右栏「循环事件」按钮；§3.1 目录树加 `events/`；§3.2 日程行规则后缀 `<!--r:规则id-->`
+- 日历右键补齐：菜单新增「删除事件」（danger + ConfirmDialog「确认删除？」）；日期格菜单加「添加循环事件」；循环实例菜单 = 编辑循环规则 / 删除本次 / 删除整条循环（均含「打开该日日记」）
+- 循环事件全链路：schema 加 `RecurRule`/`RecurFreq`/`RecurDraft` + `EventItem.ruleId` + `CalendarDraft.repeat`；新建 `lib/recurrence.ts`（`occurrencesBetween` 纯函数 + `addMonthsKey` + `describeRule`）；`markdown.ts` 日程行后缀写/读 + `parseRecurringRules`/`buildRecurringRules`（沿用分区式 MD 先例，禁 gray-matter）；store 加 `recurRules` 状态、`materializeRecurrences`（懒物化 + 清理窗口内多余实例）、`upsertRecurRule`、`removeRecurRule`（二选一保留/清除）、`removeOccurrence`（记 except）、`openEditRuleDraft`（openCreateDraft/openEditDraft/saveDraft/deleteSelected 同步改造）
+- UI：「重复」区拆成 `RecurrenceFields.svelte`（开关 + 频率/间隔/周几/永久或至某日）；新增 `RecurringRulesDialog.svelte`（列表 + 人类可读描述 + 编辑/删除二选一弹窗）；`DetailPanel` 日历分区加「循环事件」按钮；`CalendarPage` 拆出 `CalendarMdPreview.svelte` 以回到 300 行内；EventEditor 删除按钮加二次确认
+
+**关键发现（实测确认）：**
+- svelte-check **0 错误 0 警告**；组件行数全部 ≤300：CalendarPage 296 / CalendarMdPreview 72 / EventEditor 197 / RecurrenceFields 233 / RecurringRulesDialog 261 / DetailPanel 237
+- 自测页模式（probe 放项目根，Vite:5199 + Edge `--headless=new --dump-dom`）实测通过：频率语义全部正确（daily 隔 2、weekly 周一三、monthly 1-31→2-28 钳制、yearly 2-29→平年 2-28）；`addMonthsKey("2026-01-31",3)="2026-04-30"`
+- 日程行 `<!--r:r_1a2b3c-->` 写入/解析往返一致（普通事件无后缀）；规则库 `buildRecurringRules`→`parseRecurringRules` 字段完全一致
+- store 物化：每周一三规则窗口内生成 26 个实例（首 2026-10-19，末 2027-01-13）；「删除本次」后剩 25 且 except 记录 `["2026-10-19"]`；远期规则（start 2027-06-01）生成 **0** 个实例（不创建远期 md，符合 §2.10）
+- 日历右键 DOM 实测：日期格菜单「添加事件/添加循环事件/打开该日日记」；事件菜单「编辑事件/删除事件/打开该日日记」；循环实例左键编辑草稿自动带 `repeat` + `ruleId`
+- 探针文件与临时 dev 服务器已删除/停止，无残留
+
+**留下的问题 / 下一步：**
+- 用户实机走查：真实右键指针事件（无头合成 contextmenu 可触发，但 FullCalendar dateClick 仍需真机）、循环实例拖拽改期与规则的一致性（当前按普通事件移动，不回写规则）、规则编辑后旧实例清理的实机确认
+- 循环实例手工改期会脱离窗口语义（后续可考虑回写 except / 规则）
+- release exe 重建并拷至 `release\CompassZha.exe` 待实测
+
+**涉及文件：**
+- 文档：`CompassZha-总需求文档-v4.0.md`（根 + 主工程双副本）
+- 新建：`src/lib/recurrence.ts`；`src/components/calendar/RecurrenceFields.svelte`、`RecurringRulesDialog.svelte`、`CalendarMdPreview.svelte`
+- 修改：`src/types/schema.ts`、`src/lib/markdown.ts`、`src/stores/app.svelte.ts`、`src/components/calendar/CalendarPage.svelte`、`src/components/calendar/EventEditor.svelte`、`src/components/layout/DetailPanel.svelte`
+
+---
+
+## 2026-10-17 12:00 | GLM-5.3 (Trae Agent) | 任务来源：用户 v4.19 走查反馈（/plan 已批准）「一：重复语义/测试残留清理（侧边栏箭头角标、语料对话更名隆中对、三处说明删除）；二：功能要求（板块卡片右键编辑/删除、座右铭大字区、全局面板右键菜单体系）」
+
+**做了什么：**
+- 需求文档 v4.19 → v4.20（双副本同步 + Compare-Object 校验一致）：版本表、变更摘要 7 条、§2.5 座右铭 spec、§2.7 更名隆中对、§2.9 右键交互规范 + 侧边栏箭头按钮、阶段 4 检查点 4 处更名
+- 更名与文案：全 UI「语料对话」→「隆中对」（Sidebar/App/ChatPage/ChatHelp/AiConfigSection/ai.ts 共 12 处）；ChatPage 引导页改「配置你的AI」+「通过配置AI和培养语料，培养一个属于你的诸葛孔明」；删三处实现细节说明（外观主题色括注、FocusRecordList 落盘说明、GoalHeatmaps contribution 说明）
+- 侧边栏展开/收拢角标：文字 «/» → 用户自绘「箭头.svg」（Icon key `collapse`，16px，文档流独立首行 chip，与 LOGO 区隔；收拢态 `scaleX(-1)` 镜像朝右）；「写作.svg」注册 key `writing`（MottoZone 编辑按钮）
+- 座右铭：store `mottos` + `loadMottos`（loadAll 内联）+ `saveMottos`（`life/座右铭.md` 每行一条）；新组件 MottoZone（大字 2.5× ≈50px 全部逐条显示、空态「填写你的座右铭」、分割线区隔）+ MottoDialog（todo 编辑窗形态，每行一条可增删）
+- 右键体系：新通用组件 ContextMenu（GitHub 式浮层）+ ConfirmDialog（「确认删除？」）；main.ts 全局屏蔽 WebView 默认右键菜单（输入框放行保留原生粘贴/复制，空白处右键无反应）；板块卡片右键 = 编辑（BoardRenameDialog 复用 renameBoard 链路）/ 删除（复用 BoardDeleteDialog，del 后补 onCancel 自关）；日历右键 = 事件上「编辑事件」/ 日期格「添加事件」/ 均含「打开该日日记」（eventDidMount 挂 dataset.eventId 供 DOM 反查）；FileTree 右键 = 定位文件位置（新 Rust 命令 fs_reveal）/ 编辑文件 / 删除文件（二次确认）；隆中对消息右键 = 复制该段对话
+- Rust：`fs_cmds.rs` 新增 `fs_reveal`（`explorer /select,<绝对路径>` + CREATE_NO_WINDOW，全 command 异步），lib.rs 注册，tauri-fs.ts 加 `fsReveal` wrapper
+
+**关键发现（实测确认）：**
+- svelte-check **0 错误 0 警告**；cargo check 通过（15.4s）；vite build 通过
+- 无头走查（自测页模式，probe 放**项目根**而非 public/——public 下 HTML 不经 Vite 转换，原生 module 无法 import CSS/裸包）：人生板块页座右铭两条大字渲染正确、隆中对引导页 banner 文案生效、番茄钟说明段已删、侧边栏 2x 特写确认箭头按钮渲染（顶部独立行，双箭头图案 = 用户 SVG 原样）
+- Edge 无头截图对 1400x900 稳定，但 App 有 800px 最小宽度守卫，窗口 <800 时只截到「窗口过窄」守卫页（820 窗口实际视口 786px 仍触发，需 ≥900）
+- MottoDialog 的 each 项 `bind:value={item}` 在 runes 模式非法（each_item_invalid_assignment），改 `value={item}` + `oninput={(e) => (items[i] = ...)}`
+- life/ 根下散文件不干扰板块扫描（既有 goal-stats.md 先例，扫描按「仅子文件夹」跳过），座右铭存 `life/座右铭.md` 安全
+- ChatPage/CalendarPage 行数超 300（318→343 / 278→310，历史已超基线上的新增最小化）；LifeBoardPage 317 超标 → 拆 MottoZone 后 256
+
+**留下的问题 / 下一步：**
+- 用户实机走查 v4.20：右键菜单全套（无头无法模拟真实右键指针事件）、座右铭编辑弹窗与重启持久化、fs_reveal 定位文件、隆中对桌面模式引导页（浏览器预览只见 banner 不见 guide 卡属预期）
+- release exe 构建后台进行中（tauri build --no-bundle，指纹无需再清——本次未动 icon.ico）
+- CalendarPage 310 行仍超 CODE-003 红线 10 行，后续迭代若再增日历功能需拆分菜单/预览子组件
+
+**涉及文件：**
+- 文档：`CompassZha-总需求文档-v4.0.md`（根 + 主工程双副本）
+- 新建：`src/components/common/ContextMenu.svelte`、`ConfirmDialog.svelte`；`src/components/life/MottoZone.svelte`、`MottoDialog.svelte`、`BoardRenameDialog.svelte`；`src/assets/icons/misc/箭头.svg`、`写作.svg`
+- 修改：`Sidebar.svelte`、`App.svelte`、`ChatPage.svelte`、`ChatHelp.svelte`、`AiConfigSection.svelte`、`ai.ts`、`SettingsPage.svelte`、`FocusRecordList.svelte`、`GoalHeatmaps.svelte`、`LifeBoardPage.svelte`、`BoardDeleteDialog.svelte`、`CalendarPage.svelte`、`FileTree.svelte`、`main.ts`、`stores/app.svelte.ts`、`lib/tauri-fs.ts`、`Icon.svelte`、`src-tauri/src/fs_cmds.rs`、`lib.rs`
+
+---
+
+## 2026-10-17 04:47 | GLM-5.3 (Trae Agent) | 任务来源：用户 v4.18 走查反馈「日历深色模式高亮列与顶栏仍未按主题色、GitHub 标志深色下不可见、release exe 图标还是没换上我的 .ico」→「已经卡住非常久了，请排查问题，并且落地我的要求」
+
+**做了什么：**
+- 需求文档 v4.18 → v4.19（双副本同步），变更摘要 4 条；计划文档 `.trae/documents/v4.19-calendar-dark-icon-fix-plan.md`
+- 日历根因修复：FC 六个 `--fc-*` 变量从 `.cal-card :global(.fc)`（后代选择器，永不匹配）改到 `.cal-card` 自身；新增 `--color-primary-tint` token（浅 12% / 深 26% color-mix）专供当日列与高亮，`fc-day-today` 同步换用
+- GitHub 图标：`github.svg` 写死 `fill:rgb(48,48,48)` → `currentColor`；SettingsPage/AiConfigSection `.head-ico`、Sidebar git 状态、AuthorDialog repo-link 图标色提为 `--color-text-primary`（深色近白）
+- 排查"卡住"：实为构建管道缓冲导致日志空转假象，rustc 活跃编译中；等待 ~15s 后构建完成
+- 重建 release exe → `release\CompassZha.exe`（6,240,256 bytes，04:44:41），冒烟通过（pid 存活 34.9MB），`刷新图标缓存.bat` + 使用说明新增图标缓存章节
+
+**关键发现（实测确认）：**
+- **v4.18 exe 是双重坏件**：① 用 `cargo build --release` 直编——6.2MB 版未内嵌前端资源（旧 22.8MB 版是历史 tauri build 产物但 resource.lib 陈旧）；② tauri-build 的 rerun-if-changed **不监听 icons/icon.ico**，换图标后 resource.lib 缓存不失效 → 此前交付的 04:00 exe 内嵌仍是旧蓝罗盘（此前会话"提取验证为新图标"的结论是错的，当时比对的 ref 渲染路径不同掩盖了差异）。修复：清 `target/release/.fingerprint/compass-*` + `cargo clean -p compass` 强制重跑构建脚本
+- **图标终验**：04:44 构建 exe 内嵌 32px 档与用户 ico 32px 渲染逐像素比对 **diffRatio=0.0%**（1024 像素全等）；exe 含 `/assets/`、`favicon.svg` 前端资源字符串。注意 32px 下 "zha" 字样过小不可见属正常，48px+ 档可见
+- **FullCalendar v6 根因**：`Calendar.setClassNames()` 把 `fc` 类加在容器元素本身（`cal-card` 即 `.fc`），后代选择器覆写永不生效——这同时解释了顶栏白底（FC 内置 `--fc-page-bg-color:#fff`）与今日列默认黄橄榄
+- 深色+黄 / 浅色+蓝 / 深色+绿三组合自测页截图实证：顶栏深色、日期文字可见、今日列主题色淡底、无白带残留（自测页已删）
+
+**留下的问题 / 下一步：**
+- 用户实机走查 v4.19：日历明暗四主题、GitHub 标志深色可见性、exe 图标（若仍显示旧图标双击 `刷新图标缓存.bat` 或重启电脑——Windows 图标缓存）
+- 3 个旧 compass 构建目录被系统锁定无法删除（`build_script_build-*.exe` 拒绝访问），不影响构建正确性，后续新会话可清理
+- TrendCharts.svelte 残留硬编码 `#2563eb` 旧主色（未在本次范围）
+
+**涉及文件：**
+- 改：`工程/主工程compass/src/tokens.css`、`src/components/calendar/CalendarPage.svelte`、`src/components/layout/Sidebar.svelte`、`src/components/settings/SettingsPage.svelte`、`src/components/settings/AiConfigSection.svelte`、`src/components/settings/AuthorDialog.svelte`、`src/assets/icons/misc/github.svg`、`CompassZha-总需求文档-v4.0.md`（根+主工程双副本）、`release/使用说明.txt`
+- 增：`release/刷新图标缓存.bat`（用户后续手动改过，勿回退）
+- 产物：`release/CompassZha.exe`（04:44:41 构建，图标像素级验证为用户 ico）
+
+---
+
 ## 2026-10-17 01:55 | DeepSeek-V4.1-Flash (Trae Agent) | 任务来源：用户「我的CLI配置完了，你再做一次提交试试」→「这个还是处理掉吧（颜色与美术资源脱管）、10-16 的日记数据直接帮我删了，这些测试数据我不希望任何人下载到，我们现在确实需要 release 一份最新版本的工程，让人能直接上手用」（指定 github 插件 + git-commit Skill）
 
 **做了什么：**

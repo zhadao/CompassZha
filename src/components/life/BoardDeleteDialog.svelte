@@ -10,6 +10,7 @@
 
   function del(keepStats: boolean): void {
     app.deleteBoard(board.id, keepStats); // store 会置 boardNotice 并退回网格
+    onCancel(); // v4.20：删除即关弹窗（网格态从右键菜单进入时，弹窗不再随视图卸载）
   }
 </script>
 
@@ -48,29 +49,31 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgb(17 24 39 / 32%);
+    background: var(--color-overlay);
   }
   .dialog {
     width: min(420px, calc(100vw - 48px));
     padding: var(--space-4);
-    background: var(--bg-elevated, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-4);
   }
   .dialog-title {
     margin: 0 0 var(--space-2);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-text-primary);
   }
   .dialog-text {
     margin: 0 0 var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     line-height: 1.7;
-    color: var(--text-primary, #1f2937);
+    color: var(--color-text-primary);
   }
   .dialog-text code {
-    font-size: 12px;
-    color: var(--text-secondary, #6b7280);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
   }
   .dialog-actions {
     display: flex;
@@ -79,36 +82,38 @@
     margin-top: var(--space-3);
   }
   .btn {
-    padding: 7px 12px;
-    font-size: 13px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color, #e5e7eb);
-    background: var(--bg-primary, #fff);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-size-sm);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
     cursor: pointer;
   }
   .btn:hover {
-    background: var(--bg-hover, #f3f4f6);
+    background: var(--color-surface-alt);
   }
   .btn.danger {
-    color: var(--danger, #dc2626);
-    border-color: var(--danger, #dc2626);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
   }
   .btn.danger.solid {
-    background: var(--danger, #dc2626);
-    color: #fff;
+    background: var(--color-danger);
+    border-color: var(--color-danger);
+    color: #ffffff;
   }
   .btn.danger.solid:hover {
     opacity: 0.9;
   }
   .btn.ghost {
     margin-left: auto;
-    color: var(--text-secondary, #6b7280);
+    color: var(--color-text-secondary);
   }
   .dialog-hint {
     margin: var(--space-3) 0 0;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     line-height: 1.7;
-    color: var(--text-secondary, #6b7280);
+    color: var(--color-text-secondary);
   }
   .dialog-hint code {
     font-size: 11px;

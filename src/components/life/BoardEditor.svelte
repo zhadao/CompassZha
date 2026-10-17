@@ -1,14 +1,16 @@
 <script lang="ts">
   /**
    * 板块编辑器（v4.5：板块文件夹视图内的右侧编辑器）。
-   * - mode="create"：新建板块表单（名称 + emoji 选择）→ app.createBoard（= 在 life/ 下建子文件夹）
+   * - mode="create"：新建板块表单（名称 + 自绘 SVG 图标选择）→ app.createBoard（= 在 life/ 下建子文件夹）
    * - 传入 { board, file }：该板块内单个 Markdown 文件的所见即所得编辑（正文编辑、frontmatter 保留）
+   * v4.17：icon 字段存「svg:键名」；旧 emoji 数据由展示层回退，不迁移。
    */
   import { app } from "../../stores/app.svelte";
   import { BOARD_ICONS } from "../../mock/preview";
   import { dailyBody, replaceBody } from "../../lib/markdown";
   import type { BoardFile, LifeBoard } from "../../types/schema";
   import CrepeEditor from "../common/CrepeEditor.svelte";
+  import Icon from "../common/Icon.svelte";
 
   interface Props {
     mode?: "create";
@@ -28,7 +30,7 @@
       error = "给板块起个名字";
       return;
     }
-    app.createBoard(name, icon);
+    app.createBoard(name, `svg:${icon}`);
     name = "";
     error = "";
     onDone?.();
@@ -67,9 +69,10 @@
               type="button"
               class="icon-btn"
               class:active={icon === ic}
+              aria-label={`选择图标 ${ic}`}
               onclick={() => (icon = ic)}
             >
-              {ic}
+              <Icon name={ic} size={39} />
             </button>
           {/each}
         </div>
@@ -134,12 +137,14 @@
 
   .icon-grid {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(9, 1fr);
     gap: var(--space-1);
   }
 
   .icon-btn {
-    font-size: var(--font-size-lg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: var(--space-1);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);

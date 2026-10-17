@@ -1,18 +1,30 @@
 <script lang="ts">
   import { app } from "../../stores/app.svelte";
-  import StaticBadge from "../layout/StaticBadge.svelte";
+  import Icon from "../common/Icon.svelte";
+  import BoardIcon from "../common/BoardIcon.svelte";
   import BoardEditor from "./BoardEditor.svelte";
   import BoardFolder from "./BoardFolder.svelte";
+  import MottoZone from "./MottoZone.svelte";
+  import ContextMenu, { type MenuItem } from "../common/ContextMenu.svelte";
+  import BoardRenameDialog from "./BoardRenameDialog.svelte";
+  import BoardDeleteDialog from "./BoardDeleteDialog.svelte";
   import type { LifeBoard } from "../../types/schema";
 
-  const purpose =
-    "干什么：每个板块是 life/ 下一个文件夹，点开卡片进入文件夹——左侧文档列表，右侧编辑器，在里面新建多个 Markdown 分别梳理思路，每天 check 自己。";
-
   let creating = $state(false);
+  /** v4.20：卡片右键菜单 / 编辑与删除弹窗（座右铭区见 MottoZone） */
+  let cardMenu = $state<{ x: number; y: number; board: LifeBoard } | null>(null);
+  let renaming = $state<LifeBoard | null>(null);
+  let deleting = $state<LifeBoard | null>(null);
 
   const openedBoard = $derived<LifeBoard | null>(
     app.lifeBoards.find((b) => b.id === app.openedLifeBoardId) ?? null,
   );
+
+  /** v4.20：卡片右键 →「编辑 / 删除」菜单（§2.5） */
+  function onCardMenu(e: MouseEvent, board: LifeBoard): void {
+    e.preventDefault();
+    cardMenu = { x: e.clientX, y: e.clientY, board };
+  }
 
   /** 网格态点击卡片：右栏摘要联动 + 打开文件夹视图 */
   function select(id: string): void {
@@ -34,14 +46,19 @@
 </script>
 
 <div class="page">
-  <StaticBadge />
-
   {#if app.boardNotice}
     <!-- v4.9：板块删除结果横幅（告知热力图历史数据保留位置） -->
     <div class="board-notice">
       <span>{app.boardNotice}</span>
-      <button class="notice-x" title="知道了" onclick={() => (app.boardNotice = null)}>✕</button>
+      <button class="notice-x" title="知道了" onclick={() => (app.boardNotice = null)}>
+        <Icon name="close" size={20} />
+      </button>
     </div>
+  {/if}
+
+  {#if !openedBoard}
+    <!-- v4.20：座右铭大字展示区（life/座右铭.md 每行一条全部逐条显示；§2.5） -->
+    <MottoZone />
   {/if}
 
   {#if openedBoard}
@@ -52,9 +69,8 @@
     <BoardEditor mode="create" onDone={() => (creating = false)} />
   {:else if app.lifeBoards.length === 0}
     <!-- 空态：人生板块初始为空（v3.1：用户自建） -->
-    <p class="purpose">{purpose}</p>
     <section class="empty card">
-      <div class="empty-icon">🧭</div>
+      <div class="empty-icon"><Icon name="life" size={54} /></div>
       <h2 class="empty-title">还没有任何板块</h2>
       <p class="empty-desc">
         每创建一个板块，相当于在「人生板块」文件夹里创建一个子文件夹；点开卡片进入文件夹视图——左侧是该板块的
@@ -64,7 +80,6 @@
     </section>
   {:else}
     <!-- 网格态：用户已建的板块 -->
-    <p class="purpose">{purpose}</p>
     <section class="grid">
       {#each app.lifeBoards as board (board.id)}
         <button
@@ -74,8 +89,11 @@
             select(board.id);
             app.openBoard(board.id);
           }}
+          oncontextmenu={(e) => onCardMenu(e, board)}
         >
-          <div class="card-icon">{board.icon}</div>
+          <div class="card-icon">
+            <BoardIcon icon={board.icon} size={45} />
+          </div>
           <div class="card-name">{board.name}</div>
           <div class="card-scope">{preview(board)}</div>
           <div class="card-count">{board.files.length} 个文档</div>
@@ -89,6 +107,37 @@
     </section>
   {/if}
 </div>
+
+{#if cardMenu}
+  {@const cardItems: MenuItem[] = [
+    {
+      label: "编辑",
+      action: () => {
+        renaming = cardMenu!.board;
+      },
+    },
+    {
+      label: "删除",
+      danger: true,
+      action: () => {
+        deleting = cardMenu!.board;
+      },
+    },
+  ]}
+  <ContextMenu
+    x={cardMenu.x}
+    y={cardMenu.y}
+    title={cardMenu.board.name}
+    items={cardItems}
+    onclose={() => (cardMenu = null)}
+  />
+{/if}
+{#if renaming}
+  <BoardRenameDialog board={renaming} onDone={() => (renaming = null)} />
+{/if}
+{#if deleting}
+  <BoardDeleteDialog board={deleting} onCancel={() => (deleting = null)} />
+{/if}
 
 <style>
   /* v4.9：板块删除结果横幅 */
@@ -106,26 +155,19 @@
   }
 
   .notice-x {
+    display: inline-flex;
     margin-left: auto;
-    border: none;
-    background: transparent;
-    cursor: pointer;
     color: var(--color-text-tertiary);
-    font-size: var(--font-size-xs);
-    padding: 0 var(--space-1);
+    padding: 2px;
+    border-radius: var(--radius-sm);
   }
 
   .notice-x:hover {
     color: var(--color-text-primary);
+    background-color: var(--color-surface-alt);
   }
   .page {
     position: relative;
-  }
-
-  .purpose {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-tertiary);
-    margin-bottom: var(--space-3);
   }
 
   .empty {
