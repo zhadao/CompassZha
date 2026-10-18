@@ -120,11 +120,62 @@ fn data_ai_endpoint() -> (String, String) {
 
 /* ---- DeepSeek HTTP（OpenAI 兼容 chat/completions） ---- */
 
-fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .build()
+/// 构造 HTTP 客户端。`direct=true` 时禁用系统代理（忽略 HTTP_PROXY/HTTPS_PROXY 等环境变量）。
+fn client(timeout: Duration, direct: bool) -> Result<reqwest::blocking::Client, String> {
+    let mut b = reqwest::blocking::Client::builder().timeout(timeout);
+    if direct {
+        b = b.no_proxy();
+    }
+    b.build()
         .map_err(|e| format!("创建 HTTP 客户端失败：{e}"))
+}
+
+/// 展开错误原因链：reqwest 的 Display 只有「error sending request for url …」，
+/// 真正的根因（connection refused / timeout / dns 失败等）挂在 cause 链上。
+fn err_chain(e: &dyn std::error::Error) -> String {
+    let mut s = e.to_string();
+    let mut cur = e.source();
+    while let Some(c) = cur {
+        s.push_str(" → ");
+        s.push_str(&c.to_string());
+        cur = c.source();
+    }
+    s
+}
+
+/// 发送请求（v0.2.8 兼容性修复）：**先直连**（忽略系统代理环境变量），失败后再用系统代理重试一次。
+/// 缘由：不少用户电脑里残留着已失效的代理设置（例如指向 127.0.0.1:17890 的已关闭端口），
+/// reqwest 默认读这些环境变量并把请求交给不存在的代理，导致任何提问都必然失败。
+/// 直连优先可保证这类机器正常工作；只有直连不通（如确需代理上网的环境）才回落到系统代理。
+fn send(
+    url: &str,
+    key: &str,
+    body: &serde_json::Value,
+) -> Result<reqwest::blocking::Response, String> {
+    let direct = client(Duration::from_secs(180), true)?
+        .post(url)
+        .bearer_auth(key)
+        .json(body)
+        .send();
+    match direct {
+        Ok(r) => Ok(r),
+        Err(e1) => {
+            let e1 = err_chain(&e1);
+            eprintln!("[ai_chat] 直连失败，改用系统代理重试：{e1}");
+            match client(Duration::from_secs(180), false)?
+                .post(url)
+                .bearer_auth(key)
+                .json(body)
+                .send()
+            {
+                Ok(r) => Ok(r),
+                Err(e2) => Err(format!(
+                    "直连失败（{e1}）；经系统代理重试也失败（{}）",
+                    err_chain(&e2)
+                )),
+            }
+        }
+    }
 }
 
 /// 调用 chat/completions；返回首条回答文本。错误信息过滤 key（绝不回显）。
@@ -137,11 +188,7 @@ fn chat(
 ) -> Result<String, String> {
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = serde_json::json!({ "model": model, "messages": messages, "temperature": temperature });
-    let resp = client(Duration::from_secs(180))?
-        .post(&url)
-        .bearer_auth(key)
-        .json(&body)
-        .send()
+    let resp = send(&url, key, &body)
         .map_err(|e| format!("请求 AI 服务失败（检查网络/代理）：{e}"))?;
     let status = resp.status();
     let text = resp

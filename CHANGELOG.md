@@ -3,6 +3,27 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.2.8] - 2026-10-18
+
+修复 AI 服务在「装过代理工具、残留失效代理配置」的机器上必然连不上的问题 —— 让软件在
+各种普通用户环境里开箱即用。
+
+### 修复
+
+- **AI 请求对残留代理免疫**：不少机器装过网络工具（VPN / 抓包 / 代理客户端）后，会在环境变量里
+  留下已失效的代理配置（例如 `HTTP_PROXY=http://127.0.0.1:17890`，而该端口实际已无监听）。
+  此前 AI 请求会照着这些残留配置把请求发给一个不存在的代理，于是**任何提问都失败**并报
+  `请求 AI 服务失败（检查网络/代理）：error sending request for url (…)`——连服务端返回的 401 都拿不到。
+  现改为**先直连（忽略系统代理）→ 直连失败才回落系统代理**：正常网络下即使系统挂着失效代理也能连上
+  AI 服务；确实需要代理才能上网的环境（公司内网 / 需要代理出海等）仍可正常工作。
+  这类残留普通用户无从判断，软件自身应当是免疫的，不应要求用户自己去清理环境变量。
+- **AI 报错带根因**：失败信息会展开底层原因链（`connection refused` / `timeout` / DNS 失败等），
+  便于区分是网络问题还是配置问题，不再是笼统的一句「检查网络/代理」。
+
+### 变更
+
+- 语料对话与仪表盘数据分析两条 AI 链路共用同一发送逻辑，一并修复。
+
 ## [0.2.7] - 2026-10-18
 
 同步认证方式交还 git——默认免输入（系统凭据管理器 / SSH 密钥）。
@@ -237,7 +258,8 @@ API Key，数据仍只保存在本地 Markdown——软件不内置任何密钥�
 - 章节级「手术式写回」：只替换被修改的章节，用户手改内容字节级保留。
 - 全部业务数据以纯 Markdown 文件存储，无数据库、无专有格式，便于 AI 直接读取分析。
 
-[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.5...HEAD
+[未发布]: https://github.com/zhadao/CompassZha/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.7
 [0.2.5]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.5
 [0.2.4]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.4
 [0.2.3]: https://github.com/zhadao/CompassZha/releases/tag/v0.2.3
