@@ -27,10 +27,11 @@
       tip = null;
       return;
     }
+    const adv = Number(el.getAttribute("data-advance") ?? "0");
     tip = {
       x: e.clientX,
       y: e.clientY,
-      text: `${el.getAttribute("data-date")} · ${board} ${el.getAttribute("data-count")} 次提及`,
+      text: `${el.getAttribute("data-date")} · ${board} 提及 ${el.getAttribute("data-count")} 次 · 推进 ${adv} 项`,
     };
   }
 </script>
@@ -61,21 +62,29 @@
   {/each}
   {#each grid.cells as c, i (c ? c.date : `pad-${i}`)}
     {#if c}
+      {@const cx = HEAT_LABEL_W + (i % grid.weeks) * (HEAT_CELL + HEAT_GAP)}
+      {@const cy = HEAT_LABEL_H + Math.floor(i / grid.weeks) * (HEAT_CELL + HEAT_GAP)}
       <rect
         class="hcell lv{c.level}"
-        x={HEAT_LABEL_W + (i % grid.weeks) * (HEAT_CELL + HEAT_GAP)}
-        y={HEAT_LABEL_H + Math.floor(i / grid.weeks) * (HEAT_CELL + HEAT_GAP)}
+        x={cx}
+        y={cy}
         width={HEAT_CELL}
         height={HEAT_CELL}
         rx={2}
         data-date={c.date}
         data-count={c.count}
+        data-advance={c.advance}
       />
+      {#if c.count > 0 && c.advance === 0}
+        <!-- D-7 角标：当天只提及、未推进 -->
+        <circle class="stall-dot" cx={cx + HEAT_CELL - 2.6} cy={cy + 2.6} r={1.7} />
+      {/if}
     {/if}
   {/each}
 </svg>
 
 <div class="legend">
+  <span class="dot-hint"><i class="dot"></i>角上圆点 = 当天只提及、未推进</span>
   <span>少</span>
   {#each [0, 1, 2, 3, 4] as lv (lv)}
     <i class="swatch lv{lv}"></i>
@@ -108,6 +117,13 @@
   .hcell:hover {
     stroke: var(--color-text-secondary);
     stroke-width: 0.9;
+  }
+
+  /* D-7：只提及未推进的角标（浅色/深色模式均取描边色，保证在绿格上可辨） */
+  .stall-dot {
+    fill: var(--color-text-primary);
+    opacity: 0.85;
+    pointer-events: none;
   }
 
   .hcell.lv0,
@@ -144,9 +160,26 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: var(--space-1);
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
+  }
+
+  .dot-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-right: auto;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: var(--color-text-primary);
+    opacity: 0.85;
   }
 
   .swatch {

@@ -6,6 +6,7 @@
    * 计时在 store 层全局运行（切分区继续走）；记录写入当日 ## 专注记录 + 累加 focus_minutes（阶段三 3.1 已接真）。
    */
   import { app } from "../../stores/app.svelte";
+  import { offsetDays, todayKey } from "../../lib/date";
   import Segmented from "../common/Segmented.svelte";
   import FocusRecordList from "./FocusRecordList.svelte";
 
@@ -37,8 +38,8 @@
   const statusText = $derived(
     t.phase === "running"
       ? t.mode === "countdown"
-        ? `倒计时 · ${t.title || "未命名任务"}`
-        : `正计时中 · ${t.title || "未命名任务"}`
+        ? `倒计时 · ${t.title || "临时专注"}`
+        : `正计时中 · ${t.title || "临时专注"}`
       : t.phase === "paused"
         ? "已暂停"
         : "准备开始",
@@ -56,6 +57,28 @@
   function stop(): void {
     app.stopAndRecord();
   }
+
+  /* ---- A-3：原详情栏「历史统计」搬进本页（今日专注 / 本周专注 / 专注段数） ---- */
+
+  /** 本周周一的日期键（周一为一周起点） */
+  function weekStartKey(): string {
+    const day = new Date().getDay();
+    return offsetDays(todayKey(), -((day + 6) % 7));
+  }
+
+  /** 番茄钟统计：从专注记录实时汇总 */
+  const todayMin = $derived.by(() =>
+    app.focusSessions
+      .filter((s) => s.date === todayKey())
+      .reduce((sum, s) => sum + s.minutes, 0),
+  );
+  const weekMin = $derived.by(() => {
+    const from = weekStartKey();
+    return app.focusSessions
+      .filter((s) => s.date >= from)
+      .reduce((sum, s) => sum + s.minutes, 0);
+  });
+  const doneCount = $derived(app.focusSessions.length);
 </script>
 
 <div class="page">
@@ -104,7 +127,7 @@
           placeholder="自定义分钟"
           bind:value={customMin}
         />
-        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（任务标题）" bind:value={title} />
+        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（可留空）" bind:value={title} />
       </div>
       <div class="btns">
         <button class="btn-primary" onclick={start}>开始倒计时</button>
@@ -120,12 +143,22 @@
       <div class="timer idle">00:00</div>
       <p class="status">不知道会专注多久？开始后自由专注，停表那一刻即记录</p>
       <div class="config">
-        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（任务标题）" bind:value={title} />
+        <input class="title-input" type="text" maxlength="30" placeholder="这次专注干什么？（可留空）" bind:value={title} />
       </div>
       <div class="btns">
         <button class="btn-primary" onclick={start}>开始专注</button>
       </div>
     {/if}
+  </section>
+
+  <section class="card stats">
+    <h3 class="stats-title">历史统计</h3>
+    <ul class="stat-list">
+      <li><span>今日专注</span><span>{todayMin} 分钟</span></li>
+      <li><span>本周专注</span><span>{weekMin} 分钟</span></li>
+      <li><span>专注段数</span><span>{doneCount} 次</span></li>
+    </ul>
+    <p class="stats-tip">由专注记录实时汇总（当日日记「## 专注记录」+ 历史加载数据）</p>
   </section>
 
   <FocusRecordList />
@@ -223,5 +256,36 @@
   .btns {
     display: flex;
     gap: var(--space-2);
+  }
+
+  .stats {
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .stats-title {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+  }
+
+  .stat-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: var(--font-size-sm);
+  }
+
+  .stat-list li {
+    display: flex;
+    justify-content: space-between;
+    color: var(--color-text-secondary);
+  }
+
+  .stats-tip {
+    margin-top: var(--space-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    line-height: 1.5;
   }
 </style>

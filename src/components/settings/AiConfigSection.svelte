@@ -118,6 +118,8 @@
     </span>
   </div>
 
+  <p class="muted">AI 也是可选的：不配照样能写日记、用番茄钟、看仪表盘。想用「隆中对」时再来配。</p>
+
   {#if !persist}
     <p class="muted">浏览器预览模式 —— AI 配置需在桌面应用内进行</p>
   {:else if !loaded}
@@ -161,7 +163,7 @@
     </label>
 
     <div class="sub-block">
-      <h3 class="sub-title">数据分析 API（可选 · 仪表盘「AI 数据分析」用）</h3>
+      <h3 class="sub-title">数据分析 API（可选 · 仪表盘「问数据」用）</h3>
       <p class="sub-note">
         可单独再配一个 API，与隆中对分开、各提升缓存命中率；只有一个 API 时留空即与上方共用。
       </p>

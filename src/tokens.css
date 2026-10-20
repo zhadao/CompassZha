@@ -206,6 +206,7 @@
   --sidebar-width: 200px;
   --sidebar-width-collapsed: 56px;
   --detail-width: 280px;
+  --calendar-side-width: 195px; /* A-8：日程列收窄（用户机屏 390 物理 px ÷ 2） */
 }
 
 /* ---- 过渡 ---- */

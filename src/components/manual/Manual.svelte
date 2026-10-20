@@ -3,9 +3,10 @@
   // 正文为 content.ts 的自撰静态 HTML，用事件委托处理两种标记：
   //   [data-jump] → 主题色标亮的关键词，点击滚到对应章节/锚点（助读）；
   //   [data-url]  → 外链，打开系统浏览器（open_url_https，回退 window.open）。
-  // 组件 ≤300 行（CODE-003）。
+  // 组件 ≤300 行（CODE-003）；目录已拆到 ManualCatalog.svelte（v4.40 C-1）。
   import { onMount } from "svelte";
   import Icon from "../common/Icon.svelte";
+  import ManualCatalog from "./ManualCatalog.svelte";
   import { CHAPTERS } from "./content";
   import { openUrlHttps } from "../../lib/tauri-fs";
 
@@ -13,17 +14,6 @@
     onclose: () => void;
   }
   let { onclose }: Props = $props();
-
-  /** 按 group 分组（CHAPTERS 为静态数据，只需算一次） */
-  const GROUPS = (() => {
-    const map = new Map<string, typeof CHAPTERS>();
-    for (const ch of CHAPTERS) {
-      const arr = map.get(ch.group) ?? [];
-      arr.push(ch);
-      map.set(ch.group, arr);
-    }
-    return [...map.entries()].map(([group, chapters]) => ({ group, chapters }));
-  })();
 
   let docEl = $state<HTMLElement | null>(null);
   let activeId = $state("");
@@ -87,22 +77,7 @@
     </header>
 
     <div class="panel-body">
-      <aside class="toc">
-        {#each GROUPS as g (g.group)}
-          <div class="toc-group">
-            <p class="toc-group-title">{g.group}</p>
-            {#each g.chapters as ch (ch.id)}
-              <button
-                class="toc-item"
-                class:active={activeId === ch.id}
-                onclick={() => scrollTo(ch.id)}
-              >
-                {ch.title}
-              </button>
-            {/each}
-          </div>
-        {/each}
-      </aside>
+      <ManualCatalog {activeId} onjump={scrollTo} />
 
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -179,50 +154,6 @@
     display: flex;
     min-height: 0;
     flex: 1;
-  }
-
-  .toc {
-    flex-shrink: 0;
-    width: 232px;
-    padding: var(--space-4) var(--space-3);
-    overflow-y: auto;
-    border-right: 1px solid var(--color-border);
-    background: var(--color-surface-alt);
-  }
-
-  .toc-group + .toc-group {
-    margin-top: var(--space-3);
-  }
-
-  .toc-group-title {
-    margin: 0 0 var(--space-1);
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: var(--color-text-tertiary);
-  }
-
-  .toc-item {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    line-height: 1.5;
-    transition: all var(--transition-fast);
-  }
-
-  .toc-item:hover {
-    background: var(--color-surface);
-    color: var(--color-text-primary);
-  }
-
-  .toc-item.active {
-    background: var(--color-primary-light);
-    color: var(--color-title);
-    font-weight: 600;
   }
 
   .doc {

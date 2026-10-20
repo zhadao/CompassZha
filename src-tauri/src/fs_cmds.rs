@@ -201,14 +201,16 @@ const DIR_README: &str = "# CompassZha 数据目录说明\n\
 \n\
 提示：这些文件建议通过 CompassZha 应用内编辑（会自动提交到本地 Git 仓库便于回溯）；也可在应用「设置 → 数据」中一键打开本目录。\n";
 
-/// §3.3 默认 config.json（version 5，v4.4：corpus_topics 为 RAG 标签路由，去 dir 字段）。
+/// §3.3 默认 config.json（version 6，v5→v6：新增 calendar 常用时段与 ui 详情栏记忆，阶段 1 A-3/A-4）。
 /// 敏感信息（DeepSeek key 等）不入本文件（SPEC-012）。
 /// v0.2.0：默认卡补 keywords——索引卡是 AI 检索的筛选器，关键词并入检索打分。
 fn default_config_json() -> String {
     let cfg = serde_json::json!({
-        "version": 5,
+        "version": 6,
         "data_root": "",
         "close_behavior": "ask",
+        "calendar": { "slot_min": "06:00", "slot_max": "24:00" },
+        "ui": { "detail_by_section": { "today": true, "calendar": true, "dashboard": true, "life": true, "pomodoro": false, "chat": false, "settings": false } },
         "corpus_topics": [
             { "id": "career", "name": "职业与方向", "keywords": ["职业选择", "跳槽", "升职", "转行", "副业", "面试", "工作", "事业"] },
             { "id": "ai-tools", "name": "AI 与工具观", "keywords": ["AI", "人工智能", "工具", "效率", "软件", "大模型", "自动化"] },
@@ -404,6 +406,12 @@ pub(crate) fn git(args: &[&str]) -> Command {
     #[cfg(windows)]
     c.creation_flags(0x0800_0000);
     c
+}
+
+/// 给非 git 的外部命令（如 ssh-keygen）也加 CREATE_NO_WINDOW，理由同上（v4.40 C-2）
+pub(crate) fn no_window(c: &mut Command) {
+    #[cfg(windows)]
+    c.creation_flags(0x0800_0000);
 }
 
 pub(crate) fn run_git(root: &Path, args: &[&str]) -> Result<(), String> {

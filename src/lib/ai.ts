@@ -1,6 +1,6 @@
 /**
- * AI 对话接缝层（阶段 4 · v4.12）：唯一允许出现 invoke 调用的位置之一（与 tauri-fs.ts 同级）。
- * 语料对话（隆中对）仅检索 dataRoot/corpus/（日记/量化数据绝不进入检索——v4.12 用户澄清）。
+ * AI 接缝层（阶段 4 · v4.12）：唯一允许出现 invoke 调用的位置之一（与 tauri-fs.ts 同级）。
+ * 隆中对仅检索 dataRoot/corpus/（日记/量化数据绝不进入检索——v4.12 用户澄清）。
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -70,7 +70,7 @@ export const aiSetConfig = (
     dataKey,
   });
 
-/** 隆中对（语料对话）：扩词 → 检索 corpus/ → 生成（返回回答 + 引用出处） */
+/** 隆中对：扩词 → 检索 corpus/ → 生成（返回回答 + 引用出处） */
 export const aiAsk = (messages: ChatMsg[]): Promise<AiAnswer> =>
   invoke<AiAnswer>("ai_ask", { messages });
 
@@ -81,6 +81,16 @@ export const dataAnalyzeAsk = (messages: ChatMsg[], dataText: string): Promise<s
 /** 「资源跳转」：用系统资源管理器打开语料文件夹 */
 export const openCorpusFolder = (): Promise<void> =>
   invoke<void>("open_corpus_folder");
+
+/** D-8①：语料库统计（递归计数，口径与检索一致） */
+export interface CorpusStats {
+  file_count: number;
+  dir_count: number;
+}
+
+/** D-8①：读取语料库统计（用于「语料还是空的」轻提示；不阻断对话） */
+export const corpusStats = (): Promise<CorpusStats> =>
+  invoke<CorpusStats>("corpus_stats");
 
 /** 读取全部索引卡 */
 export const configGetTopics = (): Promise<TopicCard[]> =>

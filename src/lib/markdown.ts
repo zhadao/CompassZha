@@ -19,6 +19,7 @@
 import type { DailyMetrics, DailyNote, FocusSession, TaskItem } from "../types/schema";
 import { emptyMetrics } from "../types/schema";
 import { genId } from "../mock/preview";
+import { CUSTOM_PREFIX } from "./trackers";
 import type { EventItem, RecurFreq, RecurRule } from "../types/schema";
 
 /** 循环实例机器可读后缀（v4.21 §3.2）：`<!--r:<规则id>-->`，用于右键识别「循环实例」 */
@@ -116,6 +117,19 @@ function toMetricValue(key: string, raw: unknown): number | string | null {
   return null;
 }
 
+/** frontmatter 自定义指标（`x_<slug>`）解析：数字串 → number；HH:mm → 字符串；空 → null */
+function toExtraValue(raw: unknown): number | string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : s;
+  }
+  return null;
+}
+
 /** YAML-lite 标量解析：null/数字/引号串/流式数组/裸串；裸 HH:mm 保持字符串（语义更对） */
 function parseScalar(s: string): unknown {
   const t = s.trim();
@@ -159,6 +173,8 @@ function parseFrontmatter(text: string): {
 /** parseDaily 的返回：结构化数据（全部来自已知章节与 frontmatter） */
 export interface ParsedDaily {
   metrics: DailyMetrics;
+  /** E-1：自定义指标（frontmatter `x_<slug>` 键；number / HH:mm 字符串 / null） */
+  metricsExtra: Record<string, number | string | null>;
   tasks: TaskItem[];
   /** ## 临时记录 原文（自由文本，含用户手写的子标题等） */
   notes: string;
@@ -188,6 +204,12 @@ export function parseDaily(text: string, date: string): ParsedDaily {
     raw[key] = v === undefined ? null : v;
   }
   const metrics = raw as unknown as DailyMetrics;
+
+  // E-1：自定义指标键（`x_<slug>`）；未知 / 已删追踪项的键一并读入并原样保留
+  const metricsExtra: Record<string, number | string | null> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (k.startsWith(CUSTOM_PREFIX)) metricsExtra[k] = toExtraValue(v);
+  }
 
   const tasks: TaskItem[] = [];
   for (const line of sectionBody(content, "今日清单").split("\n")) {
@@ -220,6 +242,7 @@ export function parseDaily(text: string, date: string): ParsedDaily {
 
   return {
     metrics,
+    metricsExtra,
     tasks,
     notes: sectionBody(content, "临时记录"),
     review: sectionBody(content, "今日收尾"),
@@ -266,14 +289,33 @@ function insertMissingSection(text: string, title: string, bodyInsertion: string
   return tail + "## " + title + "\n" + (bodyInsertion === "" ? "\n" : bodyInsertion);
 }
 
-/** 写回 frontmatter 指标：字段级手术，仅重写 9 个指标行，其余键（habits/goals/…）原样保留 */
-export function writeMetrics(text: string, metrics: DailyMetrics, date: string): string {
+/**
+ * 写回 frontmatter 指标：字段级手术。
+ * 仅重写 9 个内置指标行 **+ 本次提交的自定义指标行（`extra` 的键）**，
+ * 其余键（habits/goals/… 以及**未知 / 已删追踪项的 `x_` 键**）原样保留。
+ */
+export function writeMetrics(
+  text: string,
+  metrics: DailyMetrics,
+  extra: Record<string, number | string | null>,
+  date: string,
+): string {
   const crlf = text.includes("\r\n");
   let lf = crlf ? text.replace(/\r\n/g, "\n") : text;
 
   if (!/^---[ \t]*\n/.test(lf)) {
     // 无 frontmatter：按模板补全块（不覆盖正文）
-    const fm = ["---", `date: ${date}`, "type: daily", ...METRIC_KEYS.map((k) => `${k}: null`), "habits: []", "goals: []", "---", ""].join("\n");
+    const fm = [
+      "---",
+      `date: ${date}`,
+      "type: daily",
+      ...METRIC_KEYS.map((k) => `${k}: null`),
+      ...Object.keys(extra).map((k) => `${k}: null`),
+      "habits: []",
+      "goals: []",
+      "---",
+      "",
+    ].join("\n");
     lf = fm + "\n" + lf;
   }
 
@@ -295,7 +337,49 @@ export function writeMetrics(text: string, metrics: DailyMetrics, date: string):
     else lines.push(newLine);
   }
 
+  // E-1：自定义指标字段级手术——只动 `extra` 里出现的键；未知 / 已删键原样保留
+  for (const [key, v] of Object.entries(extra)) {
+    const re = new RegExp(`^[ \\t]*${key}[ \\t]*:`);
+    const i = lines.findIndex((l) => re.test(l));
+    const newLine = `${key}: ${yamlValue(v)}`;
+    if (i >= 0) lines[i] = newLine;
+    else lines.push(newLine);
+  }
+
   fmText = lines.join("\n") + (hadTrailingNl || lines.length ? "\n" : "");
+  lf = lf.slice(0, open) + fmText + lf.slice(closeStart);
+  return crlf ? lf.replace(/\n/g, "\r\n") : lf;
+}
+
+/**
+ * D-6：写回 frontmatter 顶层单键（字段级手术）。
+ * 用于板块默认文档的 `archived:` 标记（封存写 yyyy-mm-dd、重启写 `null`）；
+ * 其余键（含 icon）字节级原样保留；缺失该键则追加；无 frontmatter 时补最小块。
+ */
+export function writeFrontmatterKey(text: string, key: string, value: string | null): string {
+  const crlf = text.includes("\r\n");
+  let lf = crlf ? text.replace(/\r\n/g, "\n") : text;
+  const line = `${key}: ${value === null ? "null" : value}`;
+
+  if (!/^---[ \t]*\n/.test(lf)) {
+    lf = `---\n${line}\n---\n\n${lf}`;
+    return crlf ? lf.replace(/\n/g, "\r\n") : lf;
+  }
+
+  const open = lf.indexOf("\n") + 1;
+  const closeRel = /^---[ \t]*$/m.exec(lf.slice(open));
+  if (!closeRel) return crlf ? lf.replace(/\n/g, "\r\n") : lf; // 结构异常：不动
+  const closeStart = open + closeRel.index;
+
+  let fmText = lf.slice(open, closeStart);
+  const hadTrailingNl = fmText.endsWith("\n");
+  const lines = (hadTrailingNl ? fmText.slice(0, -1) : fmText).split("\n");
+  const re = new RegExp(`^[ \\t]*${key}[ \\t]*:`);
+  const i = lines.findIndex((l) => re.test(l));
+  if (i >= 0) lines[i] = line;
+  else lines.push(line);
+  fmText = lines.join("\n") + (hadTrailingNl || lines.length ? "\n" : "");
+
   lf = lf.slice(0, open) + fmText + lf.slice(closeStart);
   return crlf ? lf.replace(/\n/g, "\r\n") : lf;
 }
@@ -408,6 +492,32 @@ export function hasGoalTag(text: string, boardName: string): boolean {
 export function stripGoalTag(text: string, boardName: string): string {
   const re = new RegExp(`\\s*#goal/${escapeRe(boardName)}(?=\\s|$)`, "g");
   return text.replace(re, "").replace(/\s{2,}/g, " ").trim();
+}
+
+/** 去掉任务文本中的**全部** `#goal/xxx` 标签（D-2：以任务名作专注标题用；收敛残留空格） */
+export function stripAllGoalTags(text: string): string {
+  return text
+    .replace(/\s*#goal\/[\w\u4e00-\u9fa5-]+(?=\s|$)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** 任务文本分片（普通文字 / `#goal/xxx` 标签），供清单与日历待办卡片共用展示 */
+export interface TaskSegment {
+  type: "text" | "goal";
+  value: string;
+}
+
+/** 把任务文本切成「普通文字 / 板块标签」交替的分片（标签单独成片，便于分别着色渲染） */
+export function parseTaskSegments(text: string): TaskSegment[] {
+  return text
+    .split(/(#goal\/[\w\u4e00-\u9fa5-]+)/g)
+    .filter((p) => p !== "")
+    .map((p) =>
+      p.startsWith("#goal/")
+        ? ({ type: "goal", value: p } as const)
+        : ({ type: "text", value: p } as const),
+    );
 }
 
 /** 任务文本中某板块标签同步改名（#goal/旧名 → #goal/新名，v4.9 修订：改名不取消链接） */
@@ -558,14 +668,19 @@ export function buildRecurringRules(rules: RecurRule[]): string {
 
 /* ---- 模板与全量序列化 ---- */
 
-/** §3.2 v4.2 模板：空 frontmatter（全部指标 null）+ 五个空章节 */
-export function buildDailyFile(date: string, metrics: DailyMetrics | null = null): string {
+/** §3.2 v4.2 模板：空 frontmatter（全部指标 null）+ 五个空章节（extra = 自定义指标键） */
+export function buildDailyFile(
+  date: string,
+  metrics: DailyMetrics | null = null,
+  extra: Record<string, number | string | null> = {},
+): string {
   const m = metrics ?? emptyMetrics();
   return [
     "---",
     `date: ${date}`,
     "type: daily",
     ...METRIC_KEYS.map((k) => `${k}: ${yamlValue(m[k])}`),
+    ...Object.entries(extra).map(([k, v]) => `${k}: ${yamlValue(v)}`),
     "energy_peak: null",
     "habits: []",
     "goals: []",
@@ -586,7 +701,7 @@ export function buildDailyFile(date: string, metrics: DailyMetrics | null = null
 
 /** 全量序列化（模板 → 各章节写入）：用于往返自测与 frontmatter 异常时的恢复重建 */
 export function serializeDaily(note: DailyNote, focusLog: FocusSession[] = []): string {
-  let text = buildDailyFile(note.date, note.metrics);
+  let text = buildDailyFile(note.date, note.metrics, note.metricsExtra);
   text = writeTasks(text, note.tasks);
   text = writeNotes(text, note.notes);
   text = writeReview(text, note.review);

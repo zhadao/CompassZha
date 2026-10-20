@@ -105,11 +105,11 @@
 />
 
 <div class="overlay" role="presentation">
-  <div class="panel" role="dialog" aria-modal="true" aria-label="AI 数据分析" tabindex="-1">
+  <div class="panel" role="dialog" aria-modal="true" aria-label="问数据" tabindex="-1">
     <header class="panel-head">
       <h2 class="panel-title">
         <Icon name="ai" size={27} />
-        AI 数据分析
+        问数据
       </h2>
       <button class="close" onclick={onclose} aria-label="关闭">
         <Icon name="close" size={24} />
@@ -123,10 +123,10 @@
     {:else if !keyReady}
       <div class="panel-body">
         <div class="guide">
-          <h3>开始前需要配置一次 AI</h3>
+          <h3>问数据前，先填一次 AI 配置</h3>
           <p>
-            数据分析通过你自己的 AI API 回答，软件不内置任何密钥。请到设置页「AI
-            配置」填入 API Key（可为主对话与数据分析分别配置两个 API），回来即可提问。
+            问数据由你自己的 AI API 回答，软件不内置任何密钥。想让 AI 帮你读数据时，到设置页「AI
+            配置」填入 API Key 即可（可为主对话与问数据分别配置两个 API）；不填这块也不影响其它功能。
           </p>
           <button
             class="btn-primary"
@@ -135,7 +135,7 @@
               app.gotoSection("settings");
             }}
           >
-            去设置页配置
+            去设置页填写
           </button>
         </div>
       </div>
@@ -166,8 +166,8 @@
         <textarea
           bind:value={input}
           onkeydown={onKeydown}
-          placeholder="输入数据相关问题，Enter 发送，Shift+Enter 换行"
-          aria-label="输入数据分析问题"
+          placeholder="输入要问的数据问题，Enter 发送，Shift+Enter 换行"
+          aria-label="输入要问的数据问题"
           rows="2"
           disabled={busy}
         ></textarea>

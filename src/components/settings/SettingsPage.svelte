@@ -6,19 +6,18 @@
   import AuthorDialog from "./AuthorDialog.svelte";
   import AiConfigSection from "./AiConfigSection.svelte";
   import GitSyncSection from "./GitSyncSection.svelte";
+  import DataSection from "./DataSection.svelte";
+  import CalendarSlotSection from "./CalendarSlotSection.svelte";
+  import TrackerSection from "./TrackerSection.svelte";
+  import BriefingSection from "./BriefingSection.svelte";
+  import SettingsToc from "./SettingsToc.svelte";
   import Segmented from "../common/Segmented.svelte";
-  import Icon from "../common/Icon.svelte";
   import { appearance } from "../../stores/appearance.svelte";
   import type { AccentColor, ColorMode } from "../../lib/theme";
   import {
-    gitSyncGetConfig,
-    openDataRoot,
     closeBehaviorGet,
     closeBehaviorSet,
     persist,
-    exportDataZip,
-    exportStamp,
-    revealPath,
     type CloseBehavior,
   } from "../../lib/tauri-fs";
 
@@ -31,69 +30,20 @@
   ];
 
   const purpose =
-    "配置你自己的数据同步与 AI（软件不内置任何账号、密钥或仓库地址）；完整教程见右上角「说明书」。";
+    "软件开箱即用，不需要先配置。想让数据多设备同步、想用「隆中对」时，再来配（不内置任何账号、密钥或仓库地址）；完整教程见右上角「说明书」。";
 
-  let authorOpen = false;
-  let dataRoot = "";
-  let dirMsg = "";
-  let dirErr = false;
-  /** v4.25 §2.13：导出总数据（整个数据根 → 「下载」文件夹 zip） */
-  let exporting = false;
-  let exportPath = "";
+  let authorOpen = $state(false);
   /** v4.22 §2.11-B：关闭窗口行为（ask=每次询问 / exit=退出 / tray=托盘驻留） */
-  let closeBehavior: CloseBehavior = "ask";
+  let closeBehavior = $state<CloseBehavior>("ask");
 
   onMount(async () => {
     if (!persist) return; // 浏览器预览：无 Tauri 后端，显示预览提示
-    try {
-      dataRoot = (await gitSyncGetConfig()).data_root;
-    } catch (e) {
-      dirMsg = `读取数据目录失败：${e}`;
-      dirErr = true;
-    }
     try {
       closeBehavior = await closeBehaviorGet();
     } catch {
       // 读取失败保持默认 ask
     }
   });
-
-  /** v4.22 §3.1：在资源管理器中打开数据根目录。 */
-  async function openDir() {
-    dirMsg = "";
-    dirErr = false;
-    try {
-      await openDataRoot();
-    } catch (e) {
-      dirMsg = `打开失败：${e}`;
-      dirErr = true;
-    }
-  }
-
-  /** v4.25 §2.13：一键导出整个数据根为 zip 到「下载」文件夹。 */
-  async function exportZip() {
-    exporting = true;
-    exportPath = "";
-    dirMsg = "";
-    dirErr = false;
-    try {
-      exportPath = await exportDataZip(exportStamp());
-      dirMsg = `已导出：${exportPath}`;
-    } catch (e) {
-      dirMsg = `导出失败：${e}`;
-      dirErr = true;
-    }
-    exporting = false;
-  }
-
-  /** 导出反馈中的「打开所在文件夹」：资源管理器定位选中该 zip。 */
-  async function revealZip() {
-    try {
-      await revealPath(exportPath);
-    } catch {
-      // 打开失败静默
-    }
-  }
 
   /** v4.22 §2.11-B：切换关闭窗口行为（立即写 config.json）。 */
   async function setCloseBehavior(v: CloseBehavior) {
@@ -114,112 +64,101 @@
     <ManualButton />
   </div>
 
-  <GitSyncSection />
+  <div class="body">
+    <!-- R-3：左侧目录（点击平滑跳转、滚动自动高亮当前区块） -->
+    <SettingsToc />
 
-  <AiConfigSection />
+    <div class="content">
+      <div id="sec-git" class="anchor"><GitSyncSection /></div>
 
-  <!-- 窗口（v4.22 §2.11-B）：关闭窗口行为 -->
-  <section class="card block">
-    <h2 class="block-title">窗口</h2>
+      <div id="sec-ai" class="anchor"><AiConfigSection /></div>
 
-    <label class="field">
-      <span class="label">关闭窗口时的行为</span>
-      <select
-        value={closeBehavior}
-        disabled={!persist}
-        onchange={(e) => void setCloseBehavior(e.currentTarget.value as CloseBehavior)}
-      >
-        <option value="ask">每次询问</option>
-        <option value="exit">直接退出</option>
-        <option value="tray">最小化到托盘</option>
-      </select>
-    </label>
+      <!-- 窗口（v4.22 §2.11-B）：关闭窗口行为 -->
+      <div id="sec-window" class="anchor">
+        <section class="card block">
+          <h2 class="block-title">窗口</h2>
 
-    <p class="block-hint">选「最小化到托盘」后程序在后台驻留：托盘图标左键唤回、右键「显示主窗口 / 退出」。</p>
-  </section>
+          <label class="field">
+            <span class="label">关闭窗口时的行为</span>
+            <select
+              value={closeBehavior}
+              disabled={!persist}
+              onchange={(e) => void setCloseBehavior(e.currentTarget.value as CloseBehavior)}
+            >
+              <option value="ask">每次询问</option>
+              <option value="exit">直接退出</option>
+              <option value="tray">最小化到托盘</option>
+            </select>
+          </label>
 
-  <!-- 数据目录（v4.22 §3.1）：全部数据都是普通 Markdown 文件（CODE-008） -->
-  <section class="card block">
-    <h2 class="block-title">数据</h2>
-    <p class="block-hint">
-      全部数据都是普通 Markdown 文件，可直接用任何编辑器打开与备份。
-      <button class="link-btn" onclick={() => manual.openManual()}>目录说明见说明书</button>
-    </p>
+          <p class="block-hint">选「最小化到托盘」后程序在后台驻留：托盘图标左键唤回、右键「显示主窗口 / 退出」。</p>
+        </section>
+      </div>
 
-    <div class="field">
-      <span class="label">数据目录</span>
-      <input type="text" value={persist ? dataRoot || "读取中…" : "（桌面应用内显示）"} disabled />
-    </div>
+      <!-- 数据目录 / 导出总数据（v4.22 §3.1 / v4.25 §2.13） -->
+      <div id="sec-data" class="anchor"><DataSection /></div>
 
-    <div class="actions">
-      <button class="btn-secondary" onclick={openDir} disabled={!persist}>
-        <Icon name="file" size={21} />
-        打开数据目录
-      </button>
-      <!-- v4.25 §2.13：右下角「导出总数据」——整个 data 文件夹一键打包为 zip -->
-      <button class="btn-secondary push-right" onclick={exportZip} disabled={!persist || exporting}>
-        {exporting ? "正在打包…" : "导出总数据"}
-      </button>
-    </div>
+      <!-- 外观（v4.17）：主题色 / 明暗模式 / 开屏动画，桌面与浏览器预览均可用 -->
+      <div id="sec-appearance" class="anchor">
+        <section class="card block">
+          <h2 class="block-title">外观</h2>
 
-    {#if dirMsg}
-      <p class="feedback" class:err={dirErr}>
-        {dirMsg}
-        {#if exportPath}
-          <button class="link-btn" onclick={revealZip}>打开所在文件夹</button>
-        {/if}
-      </p>
-    {/if}
-  </section>
+          <div class="field">
+            <span class="label">主题色</span>
+            <div class="accent-row" role="radiogroup" aria-label="主题色">
+              {#each ACCENTS as a (a.value)}
+                <button
+                  class="accent-dot"
+                  class:active={appearance.prefs.accent === a.value}
+                  style:background-color={a.hex}
+                  title={a.label}
+                  aria-label={a.label}
+                  aria-checked={appearance.prefs.accent === a.value}
+                  role="radio"
+                  onclick={() => appearance.setAccent(a.value)}
+                ></button>
+              {/each}
+            </div>
+          </div>
 
-  <!-- 外观（v4.17）：主题色 / 明暗模式 / 开屏动画，桌面与浏览器预览均可用 -->
-  <section class="card block">
-    <h2 class="block-title">外观</h2>
+          <div class="field">
+            <span class="label">明暗模式</span>
+            <Segmented
+              ariaLabel="明暗模式"
+              options={[
+                { value: "light", label: "浅色" },
+                { value: "dark", label: "深色" },
+              ]}
+              value={appearance.prefs.mode}
+              onchange={(v) => appearance.setMode(v as ColorMode)}
+            />
+          </div>
 
-    <div class="field">
-      <span class="label">主题色</span>
-      <div class="accent-row" role="radiogroup" aria-label="主题色">
-        {#each ACCENTS as a (a.value)}
-          <button
-            class="accent-dot"
-            class:active={appearance.prefs.accent === a.value}
-            style:background-color={a.hex}
-            title={a.label}
-            aria-label={a.label}
-            aria-checked={appearance.prefs.accent === a.value}
-            role="radio"
-            onclick={() => appearance.setAccent(a.value)}
-          ></button>
-        {/each}
+          <label class="switch-row">
+            <input
+              type="checkbox"
+              checked={appearance.prefs.splash}
+              onchange={(e) => appearance.setSplash(e.currentTarget.checked)}
+            />
+            <span>启动时播放开屏动画（约 3.5 秒，可跳过；下次启动生效）</span>
+          </label>
+        </section>
+      </div>
+
+      <!-- 日历（阶段 1 · A-4）：时间轴常用时段 -->
+      <div id="sec-calendar" class="anchor"><CalendarSlotSection /></div>
+
+      <!-- 数据追踪（E-1 v4.41）：内置项显隐 + 自定义指标增删改 -->
+      <div id="sec-tracker" class="anchor"><TrackerSection /></div>
+
+      <!-- 每周罗盘简报（E-2 v4.44）：开关 + 周几 + 时间 + 立即预览 -->
+      <div id="sec-briefing" class="anchor"><BriefingSection /></div>
+
+      <!-- 底部角落：软件作者入口（v4.16） -->
+      <div class="author-corner">
+        <button class="btn-secondary author-btn" onclick={() => (authorOpen = true)}>软件作者</button>
       </div>
     </div>
-
-    <div class="field">
-      <span class="label">明暗模式</span>
-      <Segmented
-        ariaLabel="明暗模式"
-        options={[
-          { value: "light", label: "浅色" },
-          { value: "dark", label: "深色" },
-        ]}
-        value={appearance.prefs.mode}
-        onchange={(v) => appearance.setMode(v as ColorMode)}
-      />
-    </div>
-
-    <label class="switch-row">
-      <input
-        type="checkbox"
-        checked={appearance.prefs.splash}
-        onchange={(e) => appearance.setSplash(e.currentTarget.checked)}
-      />
-      <span>启动时播放开屏动画（约 3.5 秒，可跳过；下次启动生效）</span>
-    </label>
-  </section>
-
-  <!-- 底部角落：软件作者入口（v4.16） -->
-  <div class="author-corner">
-    <button class="btn-secondary author-btn" onclick={() => (authorOpen = true)}>软件作者</button>
   </div>
 
   {#if manual.open}
@@ -235,6 +174,23 @@
     position: relative;
   }
 
+  /* R-3：左目录 + 右内容两列；目录 sticky 常驻 */
+  .body {
+    display: flex;
+    gap: var(--space-5);
+    align-items: flex-start;
+  }
+
+  .content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* 目录跳转落点：留一点上边距，避免区块贴住滚动区顶边 */
+  .anchor {
+    scroll-margin-top: var(--space-3);
+  }
+
   .head {
     display: flex;
     align-items: flex-start;
@@ -245,6 +201,8 @@
   }
 
   .purpose {
+    flex: 1;
+    min-width: 0; /* 允许说明文字先换行让位，别把右侧按钮挤成竖排 */
     font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
     margin: 0;
@@ -313,42 +271,6 @@
   .label {
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
-  }
-
-  .field input {
-    width: 100%;
-  }
-
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  .feedback {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    margin: 0;
-  }
-
-  .feedback.err {
-    color: var(--color-danger);
-  }
-
-  /* v4.25：数据区操作行右端「导出总数据」（右下角入口） */
-  .push-right {
-    margin-left: auto;
-  }
-
-  /* v4.25：导出反馈行内「打开所在文件夹」文字按钮 */
-  .link-btn {
-    margin-left: var(--space-2);
-    padding: 0;
-    font-size: var(--font-size-sm);
-    color: var(--color-primary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-decoration: underline;
   }
 
   .author-corner {

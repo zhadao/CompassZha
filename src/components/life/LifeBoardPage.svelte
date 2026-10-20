@@ -8,13 +8,17 @@
   import ContextMenu, { type MenuItem } from "../common/ContextMenu.svelte";
   import BoardRenameDialog from "./BoardRenameDialog.svelte";
   import BoardDeleteDialog from "./BoardDeleteDialog.svelte";
+  import BoardArchiveDialog from "./BoardArchiveDialog.svelte";
+  import ArchiveBox from "./ArchiveBox.svelte";
+  import BoardNotice from "./BoardNotice.svelte";
   import type { LifeBoard } from "../../types/schema";
 
   let creating = $state(false);
-  /** v4.20：卡片右键菜单 / 编辑与删除弹窗（座右铭区见 MottoZone） */
+  /** v4.20：卡片右键菜单 / 编辑、删除、封存弹窗（座右铭区见 MottoZone） */
   let cardMenu = $state<{ x: number; y: number; board: LifeBoard } | null>(null);
   let renaming = $state<LifeBoard | null>(null);
   let deleting = $state<LifeBoard | null>(null);
+  let archiving = $state<LifeBoard | null>(null);
 
   const openedBoard = $derived<LifeBoard | null>(
     app.lifeBoards.find((b) => b.id === app.openedLifeBoardId) ?? null,
@@ -43,17 +47,20 @@
         .find((l) => l.length > 0) ?? "";
     return line || "（还没写内容）";
   }
+
+  /** D-6：卡片副标题行尾留痕文案（按任务标签 / 存档历史算最近一次投入） */
+  function traceText(board: LifeBoard): string {
+    const d = app.boardDaysSinceTrace(board.name);
+    if (d === null) return "尚无痕迹";
+    if (d === 0) return "今天有留痕";
+    return `上次留痕 ${d} 天前`;
+  }
 </script>
 
 <div class="page">
   {#if app.boardNotice}
-    <!-- v4.9：板块删除结果横幅（告知热力图历史数据保留位置） -->
-    <div class="board-notice">
-      <span>{app.boardNotice}</span>
-      <button class="notice-x" title="知道了" onclick={() => (app.boardNotice = null)}>
-        <Icon name="close" size={20} />
-      </button>
-    </div>
+    <!-- v4.9 / D-6：板块操作结果横幅（告知数据去向） -->
+    <BoardNotice />
   {/if}
 
   {#if !openedBoard}
@@ -94,9 +101,14 @@
           <div class="card-icon">
             <BoardIcon icon={board.icon} size={45} />
           </div>
-          <div class="card-name">{board.name}</div>
+          <div class="card-name">
+            {board.name}
+            {#if app.boardStalled(board.name)}
+              <span class="stall-tag" title="≥14 天没有新的投入痕迹">停滞</span>
+            {/if}
+          </div>
           <div class="card-scope">{preview(board)}</div>
-          <div class="card-count">{board.files.length} 个文档</div>
+          <div class="card-count">{board.files.length} 个文档 · {traceText(board)}</div>
         </button>
       {/each}
       <button class="life-card add-card" onclick={() => (creating = true)}>
@@ -106,6 +118,11 @@
       </button>
     </section>
   {/if}
+
+  {#if !openedBoard && app.archivedBoards.length > 0}
+    <!-- D-6：封存盒（life/_archived/）；文件夹视图内不显示 -->
+    <ArchiveBox />
+  {/if}
 </div>
 
 {#if cardMenu}
@@ -114,6 +131,12 @@
       label: "编辑",
       action: () => {
         renaming = cardMenu!.board;
+      },
+    },
+    {
+      label: "封存",
+      action: () => {
+        archiving = cardMenu!.board;
       },
     },
     {
@@ -138,34 +161,11 @@
 {#if deleting}
   <BoardDeleteDialog board={deleting} onCancel={() => (deleting = null)} />
 {/if}
+{#if archiving}
+  <BoardArchiveDialog board={archiving} onCancel={() => (archiving = null)} />
+{/if}
 
 <style>
-  /* v4.9：板块删除结果横幅 */
-  .board-notice {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-    background-color: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-2) var(--space-3);
-    margin-bottom: var(--space-3);
-  }
-
-  .notice-x {
-    display: inline-flex;
-    margin-left: auto;
-    color: var(--color-text-tertiary);
-    padding: 2px;
-    border-radius: var(--radius-sm);
-  }
-
-  .notice-x:hover {
-    color: var(--color-text-primary);
-    background-color: var(--color-surface-alt);
-  }
   .page {
     position: relative;
   }
@@ -245,6 +245,19 @@
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--color-text-primary);
+  }
+
+  /* D-6：停滞标记（≥14 天无投入痕迹） */
+  .stall-tag {
+    display: inline-block;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-1);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    color: var(--color-text-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    vertical-align: middle;
   }
 
   .card-scope {

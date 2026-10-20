@@ -1,6 +1,7 @@
 <script lang="ts">
   // 软件作者弹窗（v4.16）：设置页底部「软件作者」按钮点开。
-  // 首行作者公开库链接 → 基于的开源项目 → 项目与 MIT 简介 → 「捐献作者」展开收款码。
+  // 首行作者公开库链接 → 基于的开源项目 → 项目与 MIT 简介 → 「支持作者」展开收款码。
+  // v4.40（F）：捐赠入口全项目仅此一处（用户拍板），按钮与文案温和化为「支持作者 / 请我喝杯咖啡」。
   // 链接点击经后端 open_url_https 打开系统默认浏览器（仅 https://）。
   // v4.17：参考项目声明 uiverse.io（部分 UI 组件交互样式参考）；GitHub 式模态重漆。
   import qrcode from "../../assets/donate-qrcode.jpg";
@@ -80,7 +81,7 @@
       <section>
         <h3>关于本项目</h3>
         <p class="about">
-          CompassZha 是一个 Windows 本地「人生仪表盘」：回答「今天该干什么 / 状态怎么样 /
+          CompassZha 是一个 Windows 本地「方向罗盘」：回答「今天该干什么 / 状态怎么样 /
           人在往哪走」。所有数据以 Markdown 文件存放在你自己的目录里，可以同步到你自己的
           GitHub 私密仓库；软件不内置任何账号、密钥或默认仓库。
         </p>
@@ -92,12 +93,12 @@
 
       <div class="donate-row">
         <button class="btn-secondary donate-btn" onclick={() => (showDonate = !showDonate)}>
-          {showDonate ? "收起二维码" : "捐献作者"}
+          {showDonate ? "收起二维码" : "支持作者"}
         </button>
         {#if showDonate}
           <figure class="donate-fig">
-            <img src={qrcode} alt="捐献作者收款二维码（支付宝）" />
-            <figcaption>支付宝扫一扫 · 金额随意，感谢支持</figcaption>
+            <img src={qrcode} alt="支持作者收款二维码（支付宝）" />
+            <figcaption>用得顺手的话，请我喝杯咖啡。支付宝扫一扫即可。</figcaption>
           </figure>
         {/if}
       </div>

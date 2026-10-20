@@ -21,6 +21,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
+    /* 窄容器下不允许被挤成「一字一行」：整块不参与收缩，文案不换行 */
+    flex-shrink: 0;
     height: 34px;
     padding: 0 var(--space-3);
     border: 1px solid var(--color-border);
@@ -28,6 +30,7 @@
     background: var(--color-surface);
     color: var(--color-text-primary);
     font-size: var(--font-size-sm);
+    white-space: nowrap;
     cursor: pointer;
     transition:
       background var(--transition-fast),

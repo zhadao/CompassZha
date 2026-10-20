@@ -1,14 +1,16 @@
 <script lang="ts">
   /**
-   * 趋势七图（ECharts，总需求 §2.4 v4.1）：
-   * 全部统一为折线图形式（平滑曲线，仅系列数不同），覆盖全部可数字化指标：
-   * ①睡眠时长 ②入睡/起床时间双折线 ③体重 ④当日支出 ⑤心情 ⑥专注时长 ⑦运动步数。
-   * 数据源：每日日记 frontmatter（store 内存态，近 7/30/90 天右栏切换）；
-   * 3.4 SQLite 派生索引落地后只改本组件取数，图定义不变。
+   * 趋势曲线（ECharts，总需求 §2.4 v4.1 / E-1 v4.41）：
+   * 全部统一为折线图形式（平滑曲线，仅系列数不同），覆盖全部追踪项。
+   * 图定义由 lib/trendCharts.ts 的 buildChartSpecs(app.trackers, app.dailyNotes) 派生：
+   * 内置项按原映射（睡眠时长 → 入睡/起床时间双折线 → 体重 → 支出 → 心情 → 质量 → 专注 → 步数）
+   * + **自定义项各出一条折线**（新增指标零改代码自动出现）。
+   * 数据源：每日日记 frontmatter（store 内存态，近 7/30/90 天切换）。
    */
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { app } from "../../stores/app.svelte";
   import { offsetDays, todayKey } from "../../lib/date";
+  import { buildChartSpecs } from "../../lib/trendCharts";
   import * as echarts from "echarts/core";
   import { LineChart } from "echarts/charts";
   import {
@@ -28,150 +30,70 @@
 
   type Chart = ReturnType<typeof echarts.init>;
 
-  /** 统一图定义（数据驱动，七张图共用一套渲染逻辑） */
-  interface SeriesSpec {
-    name: string;
-    color: string;
-    /** 该系列在 date 当天的值；null = 无记录（断点） */
-    get: (date: string) => number | null;
-  }
-  interface ChartSpec {
-    key: string;
-    title: string;
-    unit: string;
-    yName: string;
-    series: SeriesSpec[];
-    /** 覆盖默认 y 轴（量程 / HH:mm 轴） */
-    yAxis?: Record<string, unknown>;
-    /** 覆盖 tooltip 值格式化（入睡/起床显示 HH:mm） */
-    tooltipFmt?: (v: number) => string;
+  /** 入睡/起床合并图不在编排序中，用「睡眠时长」的位置占位（R-1d：提升到组件作用域供拖拽复用） */
+  const ALIAS: Record<string, string> = { sleep_clock: "sleep_hours" };
+  const keyOf = (k: string): string => ALIAS[k] ?? k;
+
+  /** 图定义随追踪项表 / 日记内存态实时派生（D-5：再按仪表盘编排过滤 + 排序） */
+  const specs = $derived.by(() => {
+    const all = buildChartSpecs(app.trackers, app.dailyNotes);
+    const hidden = new Set(app.dashboardHidden);
+    const order = app.effDashboardOrder;
+    const rank = (k: string): number => {
+      const i = order.indexOf(keyOf(k));
+      return i === -1 ? order.length + 1 : i;
+    };
+    return all
+      .filter((s) => !hidden.has(keyOf(s.key)))
+      .sort((a, b) => rank(a.key) - rank(b.key));
+  });
+
+  // R-1d 拖拽排序（原生 HTML5 拖放；与指标卡共用同一份 order，故走 app.moveDashboardKey）
+  let dragKey = $state<string | null>(null);
+  let overKey = $state<string | null>(null);
+
+  function onDragStart(e: DragEvent, k: string): void {
+    dragKey = k;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", k);
+    }
   }
 
-  /** HH:mm → 当日分钟偏移 */
-  function toMin(hhmm: string | null): number | null {
-    if (!hhmm) return null;
-    const [h, m] = hhmm.split(":").map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) return null;
-    return h * 60 + m;
+  function onDragOver(e: DragEvent, k: string): void {
+    if (!dragKey || dragKey === k) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    overKey = k;
   }
 
-  function minToHHmm(m: number): string {
-    const x = ((m % 1440) + 1440) % 1440;
-    return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
+  /** 落位语义：往下拖 = 插到目标之后，往上拖 = 插到目标之前 */
+  function onDrop(k: string): void {
+    const from = dragKey;
+    dragKey = null;
+    overKey = null;
+    if (!from || from === k) return;
+    app.moveDashboardKey(keyOf(from), keyOf(k));
   }
 
-  const SPECS: ChartSpec[] = [
-    {
-      key: "sleep_hours",
-      title: "睡眠时长",
-      unit: " 小时",
-      yName: "小时",
-      series: [
-        {
-          name: "睡眠时长",
-          color: "#4f46e5",
-          get: (d) => app.dailyNotes[d]?.metrics.sleep_hours ?? null,
-        },
-      ],
-    },
-    {
-      key: "sleep_clock",
-      title: "入睡 / 起床时间",
-      unit: "",
-      yName: "时刻",
-      yAxis: {
-        min: 0,
-        max: 1440,
-        axisLabel: { formatter: (v: number) => minToHHmm(v) },
-      },
-      tooltipFmt: (v) => minToHHmm(v),
-      series: [
-        {
-          name: "入睡时间",
-          color: "#7c3aed",
-          get: (d) => toMin(app.dailyNotes[d]?.metrics.sleep_bedtime ?? null),
-        },
-        {
-          name: "起床时间",
-          color: "#f59e0b",
-          get: (d) => toMin(app.dailyNotes[d]?.metrics.sleep_wake ?? null),
-        },
-      ],
-    },
-    {
-      key: "weight",
-      title: "体重",
-      unit: " kg",
-      yName: "kg",
-      series: [
-        {
-          name: "体重",
-          color: "#0ea5e9",
-          get: (d) => app.dailyNotes[d]?.metrics.weight_kg ?? null,
-        },
-      ],
-    },
-    {
-      key: "spend",
-      title: "当日支出",
-      unit: " 元",
-      yName: "元",
-      series: [
-        {
-          name: "当日支出",
-          color: "#059669",
-          get: (d) => app.dailyNotes[d]?.metrics.spend_total ?? null,
-        },
-      ],
-    },
-    {
-      key: "mood",
-      title: "心情",
-      unit: "/5",
-      yName: "心情",
-      yAxis: { min: 0, max: 5, interval: 1 },
-      series: [
-        {
-          name: "心情",
-          color: "#db2777",
-          get: (d) => app.dailyNotes[d]?.metrics.mood ?? null,
-        },
-      ],
-    },
-    {
-      key: "focus",
-      title: "专注时长",
-      unit: " 分钟",
-      yName: "分钟",
-      series: [
-        {
-          name: "专注时长",
-          color: "#dc2626",
-          get: (d) => app.dailyNotes[d]?.metrics.focus_minutes ?? null,
-        },
-      ],
-    },
-    {
-      key: "steps",
-      title: "运动步数",
-      unit: " 步",
-      yName: "步",
-      series: [
-        {
-          name: "运动步数",
-          color: "#2563eb",
-          get: (d) => app.dailyNotes[d]?.metrics.steps ?? null,
-        },
-      ],
-    },
-  ];
+  function onDragEnd(): void {
+    dragKey = null;
+    overKey = null;
+  }
 
   const GRID = { left: 44, right: 16, top: 36, bottom: 24 };
   const axisLabel = { formatter: (v: string) => v.slice(5) };
 
-  const els: HTMLDivElement[] = [];
-  let charts: Chart[] = [];
-  /** onMount 初始化后置 true，驱动 $effect 首次可靠执行 */
+  /** 时间轴刻度抽稀：按数据跨度决定「每几个点显示一个标签」 */
+  function axisInterval(n: number): number {
+    if (n <= 8) return 0;
+    return Math.ceil(n / 6) - 1;
+  }
+
+  /** 图容器（键 → DOM，供动态增删图使用；非响应式，仅作引用表） */
+  const elsByKey: Record<string, HTMLDivElement> = {};
+  const chartMap = new Map<string, Chart>();
+  const roMap = new Map<string, ResizeObserver>();
   let ready = $state(false);
 
   function dates(): string[] {
@@ -182,33 +104,59 @@
   }
 
   onMount(() => {
-    charts = els.map((el) => echarts.init(el));
     ready = true;
-    const onResize = () => charts.forEach((c) => c.resize());
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      charts.forEach((c) => c.dispose());
-      charts = [];
-    };
   });
 
-  // 统一折线渲染：一次 effect 绘全部七图（依赖 trendRange / dailyNotes）
+  onDestroy(() => {
+    roMap.forEach((ro) => ro.disconnect());
+    chartMap.forEach((c) => c.dispose());
+    chartMap.clear();
+    roMap.clear();
+  });
+
+  // 统一折线渲染：一次 effect 建/清实例 + 绘全部图（依赖 specs / trendRange / dailyNotes）
   $effect(() => {
     if (!ready) return;
+    const keys = specs.map((s) => s.key);
+
+    // 1) 清理已移除的图
+    for (const k of [...chartMap.keys()]) {
+      if (!keys.includes(k)) {
+        roMap.get(k)?.disconnect();
+        roMap.delete(k);
+        chartMap.get(k)?.dispose();
+        chartMap.delete(k);
+      }
+    }
+    // 2) 为新出现的图建实例
+    for (const k of keys) {
+      if (chartMap.has(k)) continue;
+      const el = elsByKey[k];
+      if (!el) continue;
+      const c = echarts.init(el);
+      const ro = new ResizeObserver(() => c.resize());
+      ro.observe(el);
+      roMap.set(k, ro);
+      chartMap.set(k, c);
+    }
+
+    // 3) 绘制
     const ds = dates();
-    SPECS.forEach((spec, i) => {
-      charts[i]?.setOption({
+    const interval = axisInterval(ds.length);
+    specs.forEach((spec) => {
+      chartMap.get(spec.key)?.setOption({
         grid: GRID,
         tooltip: {
           trigger: "axis",
           valueFormatter: (v: unknown) =>
-            spec.tooltipFmt
-              ? spec.tooltipFmt(Number(v))
-              : `${v}${spec.unit}`,
+            spec.tooltipFmt ? spec.tooltipFmt(Number(v)) : `${v}${spec.unit}`,
         },
         legend: spec.series.length > 1 ? { top: 0 } : undefined,
-        xAxis: { type: "category", data: ds, axisLabel },
+        xAxis: {
+          type: "category",
+          data: ds,
+          axisLabel: { ...axisLabel, interval },
+        },
         yAxis: { type: "value", name: spec.yName, ...(spec.yAxis ?? {}) },
         series: spec.series.map((s) => ({
           type: "line" as const,
@@ -229,16 +177,30 @@
     <span class="range-tag">近 {app.trendRange} 天</span>
   </h2>
   <div class="charts-grid">
-    {#each SPECS as spec, i (spec.key)}
-      <div class="chart-box">
+    {#each specs as spec (spec.key)}
+      <div
+        class="chart-box"
+        class:dragging={dragKey === spec.key}
+        class:drag-over={overKey === spec.key && dragKey !== spec.key}
+        role="group"
+        aria-label={`${spec.title} 趋势曲线`}
+        title="按住拖动可调整曲线顺序"
+        draggable="true"
+        ondragstart={(e) => onDragStart(e, spec.key)}
+        ondragover={(e) => onDragOver(e, spec.key)}
+        ondragleave={() => {
+          if (overKey === spec.key) overKey = null;
+        }}
+        ondrop={() => onDrop(spec.key)}
+        ondragend={onDragEnd}
+      >
         <h3 class="chart-name">{spec.title}</h3>
-        <div class="chart" bind:this={els[i]}></div>
+        <div class="chart" bind:this={elsByKey[spec.key]}></div>
       </div>
     {/each}
   </div>
   <p class="tip">
-    七项指标统一折线形式；数据来自每日日记 frontmatter，录入/番茄钟记录即实时联动。时间范围在右栏切换（近
-    7 / 30 / 90 天）。
+    各追踪项统一折线形式（含自定义指标）；可拖动卡片调整顺序；数据来自每日日记 frontmatter，录入/番茄钟记录即实时联动。
   </p>
 </section>
 
@@ -282,6 +244,19 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-2);
+    overflow: hidden; /* A-1 兜底：极端宽度下裁掉溢出内容，不产生横向滚动 */
+    min-width: 0; /* 栅格项允许收缩，图表随容器自适应重绘 */
+    cursor: grab; /* R-1d：可拖动排序 */
+    transition: border-color var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .chart-box.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+  }
+
+  .chart-box.drag-over {
+    border-color: var(--color-accent);
   }
 
   .chart-name {

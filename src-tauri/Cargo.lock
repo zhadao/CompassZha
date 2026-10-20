@@ -700,7 +700,7 @@ dependencies = [
 
 [[package]]
 name = "compass"
-version = "0.2.8"
+version = "0.3.0"
 dependencies = [
  "epub-parser",
  "keyring",

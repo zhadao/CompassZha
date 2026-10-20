@@ -9,6 +9,7 @@ use tauri::Manager;
 
 mod ai_chat;
 mod appearance;
+mod config_prefs;
 mod config_topics;
 mod corpus_import;
 mod corpus_search;
@@ -62,6 +63,8 @@ pub fn run() {
             git_sync::git_sync_now,
             git_sync::git_sync_on_start,
             git_sync::git_sync_tick,
+            git_sync::git_ssh_generate_key,
+            git_sync::git_test_connection,
             corpus_search::corpus_search,
             ai_chat::ai_get_config,
             ai_chat::ai_set_config,
@@ -72,6 +75,23 @@ pub fn run() {
             config_topics::config_set_topics,
             appearance::appearance_get,
             appearance::appearance_set,
+            config_prefs::calendar_get_config,
+            config_prefs::calendar_set_config,
+            config_prefs::calendar_set_px_per_hour,
+            config_prefs::ui_get_config,
+            config_prefs::ui_set_detail_section,
+            config_prefs::ui_set_calendar_daily,
+            config_prefs::ui_set_calendar_view_mode,
+            config_prefs::ui_set_chat_guide_seen,
+            config_prefs::briefing_get_config,
+            config_prefs::briefing_set_config,
+            config_prefs::briefing_set_last_shown,
+            config_prefs::metrics_get_config,
+            config_prefs::metrics_set_pinned,
+            config_prefs::trackers_get_config,
+            config_prefs::trackers_set_config,
+            config_prefs::dashboard_get_config,
+            config_prefs::dashboard_set_config,
             fs_cmds::open_url_https,
             fs_cmds::open_data_root,
             win_cmds::close_behavior_get,
@@ -79,6 +99,7 @@ pub fn run() {
             win_cmds::app_exit,
             win_cmds::hide_to_tray,
             corpus_import::import_corpus_file,
+            corpus_search::corpus_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

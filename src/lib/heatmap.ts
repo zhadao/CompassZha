@@ -6,6 +6,8 @@
  * 从 GoalHeatmaps.svelte 拆出，遵守组件 ≤300 行（CODE-003）。
  */
 import { offsetDays } from "./date";
+import { hasGoalTag } from "./markdown";
+import type { DailyNote } from "../types/schema";
 
 /** 统计窗口（天）：371 ≈ 53 周，对齐 GitHub 一年视图；要回到近 90 天只需改成 90 */
 export const HEAT_RANGE_DAYS = 371;
@@ -26,8 +28,19 @@ const MONTHS = [
 export interface HeatDay {
   date: string;
   count: number;
+  /** D-7：当日「推进数」= 已完成且带该板块标签的任务条数（由调用方现算传入） */
+  advance: number;
   /** 0 = 空（白灰）/ 1..3 递增 / 4 = 4 次及以上（最深） */
   level: number;
+}
+
+/**
+ * D-7：板块在某天的「推进数」= 当天已完成、且文本带 #goal/板块名 的任务条数。
+ * 由 live 日记数据现算（不落盘）：goal-stats.md 只存单轴提及数，行格式保持不变。
+ */
+export function boardAdvanceOn(note: DailyNote | undefined, boardName: string): number {
+  if (!note) return 0;
+  return note.tasks.filter((t) => t.done && hasGoalTag(t.text, boardName)).length;
 }
 
 export interface HeatGrid {
@@ -57,6 +70,7 @@ function dowOf(date: string): number {
 export function buildHeatGrid(
   today: string,
   countOf: (date: string) => number,
+  advanceOf?: (date: string) => number,
 ): HeatGrid {
   const from = offsetDays(today, -(HEAT_RANGE_DAYS - 1));
   const pad = dowOf(from); // 首周不足 7 天：列内前面留空
@@ -70,6 +84,7 @@ export function buildHeatGrid(
     cells[(at % 7) * weeks + Math.floor(at / 7)] = {
       date,
       count,
+      advance: advanceOf ? advanceOf(date) : 0,
       level: heatLevel(count),
     };
   }

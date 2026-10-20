@@ -28,6 +28,34 @@ export interface DailyMetrics {
   steps: number | null;
 }
 
+/**
+ * 数据追踪项定义（E-1：内置与自定义走同一套机制）。
+ * 内置项以 `lib/trackers.ts` 的代码常量表为准（不落 config）；
+ * 自定义项落 `config.trackers`，键为 `x_<slug>`。
+ */
+export interface TrackerDef {
+  /** frontmatter 键：内置 = 固定键之一；自定义 = `x_<slug>` */
+  key: string;
+  /** 显示名 */
+  name: string;
+  /** 单位（可空） */
+  unit: string;
+  /** 录入类型：数值 / 档位 / 是·否 / 时刻 */
+  kind: "number" | "level" | "bool" | "time";
+  /** 目标方向（仅展示语义：越高越好 / 越低越好） */
+  direction: "up" | "down";
+  /** 档位型上限（kind="level"；缺省 5） */
+  max?: number;
+  /** 数值型步长（供 <input type="number" step>） */
+  step?: string;
+  /** 小数位（展示用；缺省按类推断） */
+  decimals?: number;
+  /** 是否内置（内置以代码常量表为准；自定义项落 config） */
+  builtin: boolean;
+  /** 是否隐藏（隐藏 = 表单/卡片/图表收起，日记文件里的数据保留） */
+  hidden: boolean;
+}
+
 /** 今日清单任务 */
 export interface TaskItem {
   id: string;
@@ -102,6 +130,8 @@ export interface DailyNote {
   /** 今日收尾（一句对今天的判断） */
   review: string;
   metrics: DailyMetrics;
+  /** E-1：自定义指标（frontmatter `x_<slug>` 键；number / HH:mm 字符串 / null） */
+  metricsExtra: Record<string, number | string | null>;
 }
 
 /** 板块内的一个 Markdown 文件（v4.5：板块 = 文件夹，含多文件） */
@@ -121,6 +151,14 @@ export interface LifeBoard {
   icon: string;
   /** 板块文件夹内的 Markdown 文件列表（按文件名排序） */
   files: BoardFile[];
+}
+
+/** D-6 封存盒条目：life/_archived/<名>/（archivedAt 取自默认文档 frontmatter 的 archived:） */
+export interface ArchivedBoard {
+  /** 板块名（= 目录名） */
+  name: string;
+  /** 封存日期 yyyy-mm-dd；null = 未标记 */
+  archivedAt: string | null;
 }
 
 /** 一次专注记录（番茄钟双模式产生） */
@@ -195,4 +233,9 @@ export function emptyMetrics(): DailyMetrics {
     focus_minutes: null,
     steps: null,
   };
+}
+
+/** E-1：空的自定义指标集合（自定义追踪的 frontmatter `x_` 键） */
+export function emptyMetricsExtra(): Record<string, number | string | null> {
+  return {};
 }

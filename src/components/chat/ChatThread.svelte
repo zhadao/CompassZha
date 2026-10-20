@@ -15,6 +15,12 @@
 
   let scroller: HTMLDivElement | undefined = $state();
 
+  /** D-8③：把某条引用的反思写回气泡（与 citations 下标对齐），保存对话时一并归档 */
+  function setReflection(b: ChatBubble, index: number, value: string): void {
+    if (!b.reflections) b.reflections = [];
+    b.reflections[index] = value;
+  }
+
   // 新消息后滚到底
   $effect(() => {
     void bubbles;
@@ -45,8 +51,21 @@
         <details class="cites">
           <summary>引用出处（{b.citations.length}）</summary>
           <ul>
-            {#each b.citations as c (c.rel_path + c.snippet.slice(0, 20))}
-              <li title={c.rel_path}>{c.title}</li>
+            {#each b.citations as c, ci (c.rel_path + c.snippet.slice(0, 20))}
+              <li>
+                <span class="cite-title" title={c.rel_path}>{c.title}</span>
+                <details class="reflect">
+                  <summary
+                    >{b.reflections?.[ci]?.trim() ? "反思（已记）" : "补一句反思"}</summary
+                  >
+                  <textarea
+                    rows="2"
+                    placeholder="这条引用给你的启发（可留空）"
+                    value={b.reflections?.[ci] ?? ""}
+                    oninput={(e) => setReflection(b, ci, e.currentTarget.value)}
+                  ></textarea>
+                </details>
+              </li>
             {/each}
           </ul>
         </details>
@@ -66,7 +85,7 @@
 <style>
   .thread {
     flex: 1;
-    min-height: 200px;
+    min-height: 0; /* A-2：小窗口下由消息区内部滚动，滚动条只出现在这里 */
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -136,6 +155,34 @@
 
   .cites li {
     cursor: default;
+  }
+
+  .cite-title {
+    display: block;
+  }
+
+  /* D-8③：每条引用下的「补一句反思」折叠输入 */
+  .reflect {
+    margin-top: 2px;
+  }
+
+  .reflect summary {
+    cursor: pointer;
+    color: var(--color-text-tertiary);
+  }
+
+  .reflect textarea {
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-size-xs);
+    font-family: inherit;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    resize: vertical;
   }
 
   .error {

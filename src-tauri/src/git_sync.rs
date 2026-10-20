@@ -349,6 +349,33 @@ fn token_for(cfg: &SyncCfg) -> Result<String, String> {
     }
 }
 
+/// SSH 密钥生成结果（v4.40 C-2：`git_ssh_generate_key` 返回；前端「复制公钥」直接用 public_key）
+#[derive(Serialize)]
+pub struct SshKeyResult {
+    /// true = 本次新生成；false = 本机已有密钥，直接复用（绝不覆盖）
+    pub created: bool,
+    /// 公钥全文（`ssh-ed25519 …` 一行）
+    pub public_key: String,
+}
+
+/// `~/.ssh` 目录（Windows 优先 USERPROFILE，兼容 HOME）
+fn ssh_dir() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map_err(|_| "无法定位用户主目录（USERPROFILE / HOME 均未设置）".to_string())?;
+    Ok(std::path::PathBuf::from(home).join(".ssh"))
+}
+
+/// 调 ssh-keygen 生成 ed25519 密钥对（无口令：本机私钥，简化用户操作；加 CREATE_NO_WINDOW 免黑窗）
+fn ssh_keygen(path: &Path) -> Result<Output, String> {
+    let mut c = std::process::Command::new("ssh-keygen");
+    c.args(["-t", "ed25519", "-N", "", "-C", "CompassZha data sync", "-f"])
+        .arg(path);
+    fs_cmds::no_window(&mut c);
+    c.output()
+        .map_err(|e| format!("无法启动 ssh-keygen（本机需安装 OpenSSH 客户端）：{e}"))
+}
+
 /* ---- Tauri commands（全部 async：阻塞体由运行时放线程池，v4.5 红线） ---- */
 
 #[tauri::command(async)]
@@ -505,6 +532,64 @@ pub fn git_sync_tick() -> Result<String, String> {
     sync_commit_push(&root, "定时同步", &cfg, &token).map_err(|e| {
         eprintln!("[git_sync] 定时同步失败：{e}");
         e
+    })
+}
+
+/// 生成 SSH 密钥（v4.40 C-2）：仅当 `~/.ssh/id_ed25519` 不存在时生成，**绝不覆盖**已有密钥。
+/// 返回 { created, public_key }：created=false 表示本机已有密钥、已直接复用。
+#[tauri::command(async)]
+pub fn git_ssh_generate_key() -> Result<SshKeyResult, String> {
+    let dir = ssh_dir()?;
+    let key = dir.join("id_ed25519");
+    let pubkey = dir.join("id_ed25519.pub");
+    let mut created = false;
+    if !key.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建 ~/.ssh 目录失败：{e}"))?;
+        let out = ssh_keygen(&key)?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(format!("生成 SSH 密钥失败：{err}"));
+        }
+        created = true;
+    }
+    let text = std::fs::read_to_string(&pubkey)
+        .map_err(|e| format!("公钥文件不可用（{}）：{e}", pubkey.to_string_lossy()))?;
+    Ok(SshKeyResult {
+        created,
+        public_key: text.trim().to_string(),
+    })
+}
+
+/// 测试同步连通性（v4.40 C-2）：按已保存配置对远端做一次 `git ls-remote`（**只读**，不动本地数据、不提交）。
+/// 成功返回可读结论；失败回显 git 原始报错（令牌已过滤）。
+#[tauri::command(async)]
+pub fn git_test_connection() -> Result<String, String> {
+    let root = fs_cmds::data_root();
+    let cfg = read_sync_cfg(&root);
+    if cfg.remote.is_empty() {
+        return Err("尚未配置仓库地址——请先填写仓库地址并保存配置".into());
+    }
+    if !is_valid_remote(&cfg.remote) {
+        return Err(
+            "仓库地址应形如 https://主机/用户名/仓库名.git，或 SSH 形式 git@主机:用户名/仓库名.git"
+                .into(),
+        );
+    }
+    if cfg.auth == "token" && is_ssh_remote(&cfg.remote) {
+        return Err("私人令牌只适用于 https:// 形式的仓库地址；SSH 地址请把认证方式改为「自动」".into());
+    }
+    let token = token_for(&cfg)?;
+    let out = git_net(&root, &cfg, &token, &["ls-remote", cfg.remote.as_str()])?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(format!("连接失败：{}", safe_err(&err, &cfg, &token)));
+    }
+    Ok(match cfg.auth.as_str() {
+        "token" => "测试通过：远端可达，令牌权限有效".to_string(),
+        _ if is_ssh_remote(&cfg.remote) => {
+            "测试通过：远端可达，SSH 公钥已被接受".to_string()
+        }
+        _ => "测试通过：远端可达，系统凭据可用".to_string(),
     })
 }
 

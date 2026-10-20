@@ -1,0 +1,107 @@
+/*
+ * 日历页 FullCalendar 视觉对齐（阶段 1 · A-4 / A-5 / A-6）：
+ * 这些选择器必须命中 FullCalendar 在运行时注入的 DOM（非 Svelte 模板），
+ * 因此从 CalendarPage.svelte 抽出为全局样式表，由该组件 import。
+ * 只引用 tokens.css 变量（CODE-006）；抽出原因 = 组件 ≤300 行（CODE-003）。
+ *
+ * ⚠️ v4.37 根因修复：FullCalendar 把 `fc` 类加在「挂载容器元素自身」上，
+ * 即本项目里的 .cal-card —— 故所有 FC 规则必须写成 `.cal-card.fc X`（复合选择器）。
+ * 旧写法 `.cal-card .fc X`（后代选择器）一条都不会命中（历史实现因此全部失效）。
+ */
+
+.cal-card {
+  --fc-border-color: var(--color-border);
+  --fc-page-bg-color: var(--color-surface);
+  --fc-neutral-bg-color: var(--color-surface-alt);
+  --fc-today-bg-color: var(--color-primary-tint);
+  --fc-highlight-color: var(--color-primary-tint);
+  --fc-now-indicator-color: var(--color-danger);
+}
+
+.cal-card.fc {
+  font-size: var(--font-size-sm);
+}
+
+/* A-5：行高完全由 CSS 变量 --cal-slot-h 驱动（= 1 小时像素数 ÷ 4，一格 15 分钟）。
+   表格总高 = 时段时长 × pxPerHour → 缩小即整表变短，一屏放得下一天；
+   FullCalendar 按实测格子坐标算事件纵向位置，故行高一变、事件就按真实时间比例一起缩放。
+   A-6：横向格线默认全隐（一天 = 一根贯通竖列），只在刻度行（.cal-tick）画线。 */
+.cal-card.fc .fc-timegrid-slot,
+.cal-card.fc .fc-timegrid-slot-minor {
+  height: var(--cal-slot-h);
+  border-top-style: none;
+}
+
+.cal-card.fc .fc-timegrid-slot.cal-tick {
+  border-top: 1px solid var(--color-border);
+}
+
+/* 去掉「内容撑高」：FC 给空槽行的 ::before 塞 nbsp 行盒，与刻度文字行盒一起构成
+   ~17px/格 的行高下限 → 用 content:none 去掉 nbsp，再把刻度文字绝对定位（不参与行高），
+   行高才能真正压到活泼档（--cal-slot-h 小到 4.25px）且各行为均匀高度（FC 靠相邻行插值定位）。 */
+.cal-card.fc .fc-timegrid-slot:empty::before {
+  content: none;
+}
+
+.cal-card.fc .fc-timegrid-slot-label {
+  position: relative;
+  overflow: visible;
+}
+
+.cal-card.fc .fc-timegrid-slot-label .fc-timegrid-slot-label-frame {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: visible;
+}
+
+.cal-card.fc .fc-timegrid-axis-frame {
+  overflow: visible;
+}
+
+/* 深色模式兜底：粘性表头（周视图顶部）与工具栏底色显式接 tokens，
+   防 FullCalendar 内置 var 默认值 #fff 在深色下残留成白条 */
+.cal-card.fc .fc-toolbar,
+.cal-card.fc .fc-scrollgrid-section-sticky > * {
+  background-color: var(--color-surface);
+}
+
+.cal-card.fc .fc-button-primary {
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.cal-card.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+  border-color: var(--color-primary);
+}
+
+.cal-card.fc .fc-button-primary:disabled {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+  border-color: var(--color-border);
+}
+
+.cal-card.fc .fc-event {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary-light);
+  cursor: pointer;
+}
+
+.cal-card.fc .fc-event:hover {
+  background-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+/* 当日高亮列 = 用户所选主题色淡底（v4.19：独立 tint 变量，随主题色/明暗联动） */
+.cal-card.fc .fc-day-today {
+  background-color: var(--color-primary-tint);
+}

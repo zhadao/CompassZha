@@ -6,11 +6,13 @@
 
 import type { CorpusHit } from "./ai";
 
-/** 对话气泡（ChatPage 内存态；citations 为检索引用出处，仅 assistant 有） */
+/** 对话气泡（ChatPage 内存态；citations 为检索引用出处，仅 assistant 有；
+ *  D-8③：reflections 与 citations 下标对齐，存用户对每条引用的反思，随归档写入） */
 export interface ChatBubble {
   role: "user" | "assistant";
   content: string;
   citations?: CorpusHit[];
+  reflections?: string[];
 }
 
 /** 文件名非法字符（Windows 保留：\ / : * ? " < > |，另去换行与制表） */
@@ -44,16 +46,18 @@ export function conversationRel(title: string, at: Date = new Date()): string {
   return `conversations/${fileStamp(at)}_${title}.md`;
 }
 
-/** 单条消息 → `### User` / `### Assistant` 分块（含引用出处列表） */
+/** 单条消息 → `### User` / `### Assistant` 分块（含引用出处列表；D-8③ 有反思则缩进跟一行） */
 function block(b: ChatBubble): string {
   const who = b.role === "user" ? "User" : "Assistant";
   const lines = [`### ${who}`, "", b.content.trim(), ""];
   if (b.citations && b.citations.length > 0) {
-    lines.push(
-      "引用出处：",
-      ...b.citations.map((c, i) => `${i + 1}. ${c.title}（${c.rel_path}）`),
-      "",
-    );
+    lines.push("引用出处：");
+    b.citations.forEach((c, i) => {
+      lines.push(`${i + 1}. ${c.title}（${c.rel_path}）`);
+      const note = b.reflections?.[i]?.trim();
+      if (note) lines.push(`  - 反思：${note}`);
+    });
+    lines.push("");
   }
   return lines.join("\n");
 }

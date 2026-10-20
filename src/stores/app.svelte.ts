@@ -9,6 +9,7 @@
  */
 
 import type {
+  ArchivedBoard,
   BoardFile,
   CalendarDraft,
   DailyMetrics,
@@ -19,8 +20,9 @@ import type {
   RecurRule,
   SectionId,
   TimerState,
+  TrackerDef,
 } from "../types/schema";
-import { emptyMetrics } from "../types/schema";
+import { emptyMetrics, emptyMetricsExtra } from "../types/schema";
 import { genId } from "../mock/preview";
 import { addHours, fromDateKey, offsetDays, todayKey } from "../lib/date";
 import {
@@ -34,6 +36,7 @@ import {
   writeReview,
   writeFocusLog,
   writeSchedules,
+  writeFrontmatterKey,
   schedulesToEvents,
   hasGoalTag,
   stripGoalTag,
@@ -56,13 +59,51 @@ import {
   gitAutoCommit,
   dailyRel,
   boardDefaultRel,
+  calendarGetConfig,
+  calendarSetConfig,
+  calendarSetPxPerHour,
+  uiGetConfig,
+  uiSetDetailSection,
+  uiSetCalendarDaily,
+  uiSetCalendarViewMode,
+  metricsGetConfig,
+  metricsSetPinned,
+  trackersGetConfig,
+  trackersSetConfig,
+  dashboardGetConfig,
+  dashboardSetConfig,
+  briefingGetConfig,
+  briefingSetConfig,
+  briefingSetLastShown,
+  type TrackerCfg,
+  type DashboardCfg,
 } from "../lib/tauri-fs";
+import { buildBriefing, isBriefingDue, stamp, type BriefingResult } from "../lib/briefing";
+import { pickFocus, focusClosing } from "../lib/pick-focus";
+import { aiGetConfig, dataAnalyzeAsk } from "../lib/ai";
+import {
+  clampPxPerHour,
+  DEFAULT_PX_PER_HOUR,
+  DEFAULT_TICKS,
+  type CalendarTicks,
+} from "../lib/calendarZoom";
+import {
+  ALL_BUILTIN_TRACKERS,
+  BUILTIN_TRACKERS,
+  DEFAULT_LEVEL_MAX,
+} from "../lib/trackers";
 import {
   conversationRel,
   slugTitle,
   toConversationMd,
   type ChatBubble,
 } from "../lib/chat-export";
+
+/** D-6：封存盒目录（`_` 前缀不参与常规板块扫描）与封存标记键 */
+const ARCHIVE_DIR = "life/_archived";
+const ARCHIVED_KEY = "archived";
+/** D-6：板块「停滞」判定阈值（天） */
+const STALL_DAYS = 14;
 
 /** 当前时刻 HH:mm（番茄钟开始时刻 / 提交信息用） */
 function nowHHmm(): string {
@@ -73,6 +114,10 @@ function nowHHmm(): string {
 /** 模块级句柄（store 单例生命周期 = 应用生命周期） */
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+/** A-5：缩放档位写盘防抖句柄（± 按钮 / Ctrl+滚轮连点合并为一次写） */
+let zoomSaveTimer: ReturnType<typeof setTimeout> | null = null;
+/** E-2：简报到点检查定时器（页面级，60s 一次；应用常驻期间可靠） */
+let briefingTimer: ReturnType<typeof setInterval> | null = null;
 
 /** 每日文件可被 UI 修改的章节 */
 type DailyAspect = "metrics" | "tasks" | "notes" | "review" | "focus" | "schedules";
@@ -86,15 +131,109 @@ const ASPECT_LABEL: Record<DailyAspect, string> = {
   schedules: "日程",
 };
 
+/** A-3：支持详情栏的分区（今日 / 日历 / 仪表盘 / 人生板块；其余页面不显示详情栏，也不显示「详情 / 收起详情」按钮） */
+const DETAIL_SECTIONS: readonly SectionId[] = ["today", "calendar", "life"];
+
+/** D-1 / E-1（v4.41）：可折叠的指标字段（与 Rust METRIC_FIELDS 一致；缺省 8 项全部常显） */
+const METRIC_FIELDS: readonly string[] = [
+  "sleep_hours",
+  "sleep_quality",
+  "sleep_bedtime",
+  "sleep_wake",
+  "weight_kg",
+  "spend_total",
+  "mood",
+  "steps",
+];
+
+/** HH:mm 合法性（允许 24:00 作为结束时刻） */
+function validHHmm(s: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) || s === "24:00";
+}
+
+/** E-2：简报时刻归一（非法 → 20:00；不接受 24:00 这种日界写法） */
+function briefTime(s: string): string {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s) ? s : "20:00";
+}
+
+/** E-2：周几归一（0–6，非法回落周日） */
+function briefWeekday(n: number): number {
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : 0;
+}
+
+/** E-1：config.trackers 条目 → 追踪项（自定义项；内置项以代码常量表为准） */
+function cfgToTrackerDef(c: TrackerCfg): TrackerDef {
+  return {
+    key: c.key,
+    name: c.name,
+    unit: c.unit,
+    kind: c.kind,
+    direction: c.direction,
+    max: c.max,
+    step: c.step,
+    decimals: c.decimals,
+    builtin: false,
+    hidden: c.hidden,
+  };
+}
+
+/** E-1：追踪项 → config.trackers 条目（缺省 level 上限补 5） */
+function trackerDefToCfg(t: TrackerDef): TrackerCfg {
+  return {
+    key: t.key,
+    name: t.name,
+    unit: t.unit,
+    kind: t.kind,
+    direction: t.direction,
+    max: t.kind === "level" ? (t.max ?? DEFAULT_LEVEL_MAX) : undefined,
+    step: t.step,
+    decimals: t.decimals,
+    builtin: false,
+    hidden: t.hidden,
+  };
+}
+
 class AppState {
   /* ---- 布局状态 ---- */
   section = $state<SectionId>("today");
   sidebarCollapsed = $state(false);
-  detailHidden = $state(false);
   /** 窗口宽度（响应式三档：≥1280 / 800–1280 / <800，总需求 §2.9） */
   winWidth = $state(typeof window !== "undefined" ? window.innerWidth : 1280);
-  /** 右栏当前是否可见（1280 档手动开关 + 自动画出） */
-  detailVisible = $state(true);
+  /** A-3：详情栏显隐按分区各自记忆（单一数据源，禁止各页面各存一份） */
+  detailVisibleBySection = $state<Record<SectionId, boolean>>({
+    today: true,
+    calendar: true,
+    dashboard: true,
+    life: true,
+    pomodoro: false,
+    chat: false,
+    settings: false,
+  });
+  /** A-4：日历时间轴常用时段（config.calendar 驱动；缺省 06:00–24:00） */
+  calendarSlotMin = $state("06:00");
+  calendarSlotMax = $state("24:00");
+  /** A-5：日历缩放档位 = 1 小时占多少像素（config.calendar.px_per_hour；缺省 175） */
+  calendarPxPerHour = $state(DEFAULT_PX_PER_HOUR);
+  /** A-6：日历刻度规则（config.calendar.ticks；缺省每 1 小时一横线） */
+  calendarTicks = $state<CalendarTicks>({ ...DEFAULT_TICKS, times: [] });
+  /** A-7：日历左侧「日程预览列」显隐（config.ui.calendar_daily_visible；缺省显示） */
+  calendarDailyVisible = $state(true);
+  /** D-4b：日历视图模式（config.ui.calendar_view_mode；缺省时间轴） */
+  calendarViewMode = $state<"timeline" | "todo">("timeline");
+  /** D-1：指标表单「常显」字段（config.metrics.pinned；缺省 8 项全部常显） */
+  metricPinned = $state<string[]>([...METRIC_FIELDS]);
+  /** E-1：自定义追踪项（config.trackers 里 builtin=false 的条目） */
+  customTrackers = $state<TrackerDef[]>([]);
+  /** E-1：被隐藏的内置追踪项键（config.trackers 里 builtin=true 的条目） */
+  hiddenBuiltins = $state<string[]>([]);
+  /** D-5：仪表盘编排序（config.dashboard.order；空 = 前端出默认序） */
+  dashboardOrder = $state<string[]>([]);
+  /** D-5：仪表盘隐藏的卡片键（config.dashboard.hidden；数据保留，仅不呈现） */
+  dashboardHidden = $state<string[]>([]);
+  /** R-1b：仪表盘视图模式（config.dashboard.view_mode；缺省「数据」屏） */
+  dashboardViewMode = $state<"data" | "heatmap">("data");
+  /** R-1d：热力图屏的板块顺序（config.dashboard.heatmap_order；空 = 按 life 目录序） */
+  dashboardHeatmapOrder = $state<string[]>([]);
   /** 当前编辑日（文件树 / 今日入口联动） */
   selectedDate = $state(todayKey());
 
@@ -113,6 +252,8 @@ class AppState {
   goalStats = $state<GoalStats>({});
   /** 板块删除后的提示横幅（v4.9：告知历史数据保留位置；null = 不显示） */
   boardNotice = $state<string | null>(null);
+  /** D-6：封存盒条目（life/_archived/ 下的板块目录；不参与常规网格渲染） */
+  archivedBoards = $state<ArchivedBoard[]>([]);
   /** 当前打开（文件夹视图）的板块 id；null = 网格 / 空态 */
   openedLifeBoardId = $state<string | null>(null);
   /** 文件夹视图内当前打开的文件 id（右侧编辑器显示对象）；null = 未选 */
@@ -149,6 +290,23 @@ class AppState {
   /* ---- 日记收藏（v4.6）：状态由磁盘文件名 star- 前缀派生，Set 存日期键 yyyy-mm-dd ---- */
   starredDates = $state<Set<string>>(new Set());
 
+  /* ---- E-2：每周罗盘简报（config.briefing；缺省关闭） ---- */
+  /** 是否启用每周简报 */
+  briefingEnabled = $state(false);
+  /** 触发周几（0 = 周日 … 6 = 周六） */
+  briefingWeekday = $state(0);
+  /** 触发时刻 HH:mm */
+  briefingTime = $state("20:00");
+  /** 上次弹出时刻（ISO 本地戳；启动补发判定用） */
+  briefingLastShown = $state<string | null>(null);
+  /** 简报弹层是否打开 */
+  briefingOpen = $state(false);
+  /** 当前简报内容（打开时现算） */
+  briefingData = $state<BriefingResult | null>(null);
+
+  /* ---- E-3：首页「此刻最该动的一件事」提示（无候选时给结束语） ---- */
+  focusPickNotice = $state<string | null>(null);
+
   /* ---- 落盘状态（非响应式内部记账） ---- */
   /** date → 待写回章节集合 */
   private dirtyDaily = new Map<string, Set<DailyAspect>>();
@@ -158,6 +316,39 @@ class AppState {
   loaded = false;
 
   /* ---- 派生 ---- */
+
+  /**
+   * E-1：全部追踪项 = 内置（8 项可录 + 专注时长，含隐藏覆盖）+ 自定义项。
+   * 今日表单 / 仪表盘卡片 / 趋势图统一由此派生，新增自定义指标全程零改代码。
+   * 纯读，勿在此改 state。
+   */
+  get trackers(): TrackerDef[] {
+    const hidden = this.hiddenBuiltins;
+    const builtins = ALL_BUILTIN_TRACKERS.map((t) =>
+      hidden.includes(t.key) ? { ...t, hidden: true } : t,
+    );
+    return [...builtins, ...this.customTrackers];
+  }
+
+  /** E-1：表单可录项（内置 8 项按 pinned 折叠；自定义项一律列出，hidden 除外）——纯读 */
+  get formTrackers(): TrackerDef[] {
+    return this.trackers.filter((t) =>
+      t.builtin ? BUILTIN_TRACKERS.some((b) => b.key === t.key) : !t.hidden,
+    );
+  }
+
+  /**
+   * D-5：仪表盘有效编排序 = 已存 order（忽略失效键，如已删的自定义项）
+   * ∪ 新出现的追踪项（追加末尾）。纯读，勿在此改 state。
+   * R-1b：数据屏的指标卡与趋势曲线共用此序（热力图已独立成屏，伪键 `heatmaps` 退场）。
+   */
+  get effDashboardOrder(): string[] {
+    const all = this.trackers.map((t) => t.key);
+    const saved = this.dashboardOrder.filter((k) => all.includes(k));
+    const rest = all.filter((k) => !saved.includes(k));
+    return [...saved, ...rest];
+  }
+
   get selectedEvent(): EventItem | null {
     return this.events.find((e) => e.id === this.selectedEventId) ?? null;
   }
@@ -166,7 +357,41 @@ class AppState {
     return this.peekNote(this.selectedDate);
   }
 
+  /** A-3：当前分区是否支持详情栏（不支持则不渲染详情栏与切换按钮）——纯读，勿在此改 state */
+  get detailSupported(): boolean {
+    return DETAIL_SECTIONS.includes(this.section);
+  }
+
+  /** A-3：当前分区详情栏是否可见（按 section 读取记忆 + 宽屏阈值）——纯读，勿在此改 state */
+  get detailVisible(): boolean {
+    return (
+      DETAIL_SECTIONS.includes(this.section) &&
+      this.detailVisibleBySection[this.section] &&
+      this.winWidth >= 1280
+    );
+  }
+
   /* ---- 数据装载（App onMount 调用一次） ---- */
+
+  /** D-6：读单个板块目录（life/<名>/）为内存态 LifeBoard；同时被 loadAll 与重启复用 */
+  private async readBoard(dirName: string): Promise<LifeBoard> {
+    let icon = "svg:点子";
+    const files: BoardFile[] = [];
+    const entries = await fsListDir(`life/${dirName}`).catch(() => []);
+    for (const e of entries) {
+      if (e.is_dir || !e.name.toLowerCase().endsWith(".md")) continue;
+      const text = await fsRead(`life/${dirName}/${e.name}`).catch(() => null);
+      if (text === null) continue;
+      // 图标约定：默认文件 <板块名>.md 的 frontmatter `icon:` 字段
+      if (e.name === `${dirName}.md`) {
+        const m = /^icon:[ \t]*(.+)$/m.exec(text);
+        if (m) icon = m[1].trim();
+      }
+      files.push({ id: genId("file"), name: e.name, content: text });
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name, "zh"));
+    return { id: genId("life"), name: dirName, icon, files };
+  }
 
   /**
    * 扫描真实文件装载内存态：
@@ -204,7 +429,7 @@ class AppState {
           const text = await fsRead(`daily/${y.name}/${f.name}`).catch(() => null);
           if (!text) continue;
           const p = parseDaily(text, date);
-          notes[date] = { date, tasks: p.tasks, notes: p.notes, review: p.review, metrics: p.metrics };
+          notes[date] = { date, tasks: p.tasks, notes: p.notes, review: p.review, metrics: p.metrics, metricsExtra: p.metricsExtra };
           sessions.push(...p.focusLog);
           events.push(...schedulesToEvents(p.schedules, date));
         }
@@ -217,25 +442,22 @@ class AppState {
       const boards: LifeBoard[] = [];
       const dirs = await fsListDir("life").catch(() => []);
       for (const d of dirs) {
-        if (!d.is_dir) continue;
-        let icon = "svg:点子";
-        const files: BoardFile[] = [];
-        const entries = await fsListDir(`life/${d.name}`).catch(() => []);
-        for (const e of entries) {
-          if (e.is_dir || !e.name.toLowerCase().endsWith(".md")) continue;
-          const text = await fsRead(`life/${d.name}/${e.name}`).catch(() => null);
-          if (text === null) continue;
-          // 图标约定：默认文件 <板块名>.md 的 frontmatter `icon:` 字段
-          if (e.name === `${d.name}.md`) {
-            const m = /^icon:[ \t]*(.+)$/m.exec(text);
-            if (m) icon = m[1].trim();
-          }
-          files.push({ id: genId("file"), name: e.name, content: text });
-        }
-        files.sort((a, b) => a.name.localeCompare(b.name, "zh"));
-        boards.push({ id: genId("life"), name: d.name, icon, files });
+        // D-6：跳过 `_` 前缀目录（life/_archived 等内部目录不参与常规板块扫描）
+        if (!d.is_dir || d.name.startsWith("_")) continue;
+        boards.push(await this.readBoard(d.name));
       }
       this.lifeBoards = boards;
+      // D-6：封存盒（life/_archived/<名>/；archived 标记取自默认文档 frontmatter）
+      const archived: ArchivedBoard[] = [];
+      const archDirs = await fsListDir(ARCHIVE_DIR).catch(() => []);
+      for (const d of archDirs) {
+        if (!d.is_dir || d.name.startsWith("_")) continue;
+        const text = await fsRead(`${ARCHIVE_DIR}/${d.name}/${d.name}.md`).catch(() => null);
+        const m = text ? /^archived:[ \t]*(.+)$/m.exec(text) : null;
+        const raw = m ? m[1].trim() : "";
+        archived.push({ name: d.name, archivedAt: raw && raw !== "null" ? raw : null });
+      }
+      this.archivedBoards = archived;
       // v4.9：板块投入历史存档（文件缺失 = 尚无板块改名/删除过，空表起步）
       const statsText = await fsRead("life/goal-stats.md").catch(() => null);
       this.goalStats = statsText ? parseGoalStats(statsText) : {};
@@ -251,10 +473,293 @@ class AppState {
       const ruleText = await fsRead("events/循环事件.md").catch(() => null);
       this.recurRules = ruleText ? parseRecurringRules(ruleText) : [];
       this.materializeRecurrences();
+      // A-3 / A-4：界面偏好（config.json ui / calendar；缺键用默认值兜底）
+      await this.loadPrefs();
       this.loaded = true;
+      // E-2：起页面级定时器（驻留期间每 60s 比对一次）+ 启动补发
+      this.startBriefingWatch();
     } catch (err) {
       console.error("[loadAll] 数据装载失败", err);
       this.loaded = true; // 失败也要放开写入（避免永久空转）
+      this.startBriefingWatch();
+    }
+  }
+
+  /**
+   * 装载界面偏好（A-3 详情栏按分区记忆 / A-4 日历常用时段）。
+   * 读取失败保持默认值，不影响主流程（老 config 缺键由 Rust serde 默认值兜底）。
+   */
+  private async loadPrefs(): Promise<void> {
+    try {
+      const ui = await uiGetConfig();
+      const merged: Record<SectionId, boolean> = { ...this.detailVisibleBySection };
+      for (const s of DETAIL_SECTIONS) {
+        const v = ui.detail_by_section?.[s];
+        if (typeof v === "boolean") merged[s] = v;
+      }
+      this.detailVisibleBySection = merged;
+      if (typeof ui.calendar_daily_visible === "boolean") {
+        this.calendarDailyVisible = ui.calendar_daily_visible;
+      }
+      if (ui.calendar_view_mode === "todo") this.calendarViewMode = "todo";
+      else if (ui.calendar_view_mode === "timeline") this.calendarViewMode = "timeline";
+    } catch (err) {
+      console.error("[loadPrefs] 读取界面偏好失败（用默认值）", err);
+    }
+    try {
+      const cal = await calendarGetConfig();
+      this.calendarSlotMin = cal.slot_min;
+      this.calendarSlotMax = cal.slot_max;
+      this.calendarPxPerHour = clampPxPerHour(cal.px_per_hour);
+      this.calendarTicks = {
+        everyHours: cal.ticks.every_hours,
+        times: [...cal.ticks.times],
+      };
+    } catch (err) {
+      console.error("[loadPrefs] 读取日历偏好失败（用默认值）", err);
+    }
+    try {
+      const mc = await metricsGetConfig();
+      this.metricPinned = METRIC_FIELDS.filter((k) => mc.pinned.includes(k));
+    } catch (err) {
+      console.error("[loadPrefs] 读取指标常显偏好失败（用默认值）", err);
+    }
+    try {
+      const tc = await trackersGetConfig();
+      this.customTrackers = tc.trackers.filter((t) => !t.builtin).map(cfgToTrackerDef);
+      this.hiddenBuiltins = tc.trackers
+        .filter((t) => t.builtin && t.hidden)
+        .map((t) => t.key);
+    } catch (err) {
+      console.error("[loadPrefs] 读取数据追踪项失败（用默认值）", err);
+    }
+    try {
+      const dc = await dashboardGetConfig();
+      this.dashboardOrder = [...dc.order];
+      this.dashboardHidden = [...dc.hidden];
+      this.dashboardViewMode = dc.view_mode === "heatmap" ? "heatmap" : "data";
+      this.dashboardHeatmapOrder = [...dc.heatmap_order];
+    } catch (err) {
+      console.error("[loadPrefs] 读取仪表盘编排失败（用默认值）", err);
+    }
+    try {
+      const bc = await briefingGetConfig();
+      this.briefingEnabled = bc.enabled;
+      this.briefingWeekday = bc.weekday;
+      this.briefingTime = briefTime(bc.time);
+      this.briefingLastShown = bc.last_shown;
+    } catch (err) {
+      console.error("[loadPrefs] 读取每周简报设置失败（用默认值）", err);
+    }
+  }
+
+  /** A-3：写入当前分区详情栏显隐记忆（非支持分区忽略） */
+  toggleDetail(): void {
+    const s = this.section;
+    if (!DETAIL_SECTIONS.includes(s)) return;
+    const next = !this.detailVisibleBySection[s];
+    this.detailVisibleBySection[s] = next;
+    void this.saveDetailSection(s, next);
+  }
+
+  /** A-3：持久化某分区详情栏记忆（失败仅日志，不阻断交互） */
+  private async saveDetailSection(section: SectionId, visible: boolean): Promise<void> {
+    if (!persist) return;
+    try {
+      await uiSetDetailSection(section, visible);
+    } catch (err) {
+      console.error("[saveDetailSection] 保存详情栏记忆失败", err);
+    }
+  }
+
+  /** A-4 / A-5 / A-6：保存日历偏好（时段 + 缩放档位 + 刻度规则；成功后更新内存态） */
+  async setCalendarSlots(
+    min: string,
+    max: string,
+    pxPerHour: number,
+    ticks: CalendarTicks,
+  ): Promise<void> {
+    const m = min.trim();
+    const x = max.trim();
+    if (!validHHmm(m) || !validHHmm(x) || m >= x) {
+      throw new Error("时段不合法：请填 HH:mm（如 06:00 / 24:00），且结束时间晚于开始时间");
+    }
+    const ph = clampPxPerHour(pxPerHour);
+    const tk: CalendarTicks = { everyHours: ticks.everyHours, times: [...ticks.times] };
+    await calendarSetConfig(m, x, ph, { every_hours: tk.everyHours, times: tk.times });
+    this.calendarSlotMin = m;
+    this.calendarSlotMax = x;
+    this.calendarPxPerHour = ph;
+    this.calendarTicks = tk;
+  }
+
+  /** A-5：更新缩放档位（夹到最近档位 → 立即改内存态 → 400ms 防抖写盘） */
+  setCalendarPxPerHour(n: number): void {
+    const ph = clampPxPerHour(n);
+    if (ph === this.calendarPxPerHour) return;
+    this.calendarPxPerHour = ph;
+    if (!persist) return;
+    if (zoomSaveTimer !== null) clearTimeout(zoomSaveTimer);
+    zoomSaveTimer = setTimeout(() => {
+      zoomSaveTimer = null;
+      calendarSetPxPerHour(ph).catch((err) =>
+        console.error("[setCalendarPxPerHour] 保存缩放档位失败", err),
+      );
+    }, 400);
+  }
+
+  /** A-7：翻转日历「日程预览列」显隐并持久化（浏览器预览仅改内存态） */
+  toggleCalendarDaily(): void {
+    const next = !this.calendarDailyVisible;
+    this.calendarDailyVisible = next;
+    if (!persist) return;
+    uiSetCalendarDaily(next).catch((err) =>
+      console.error("[toggleCalendarDaily] 保存日程列记忆失败", err),
+    );
+  }
+
+  /** D-4b：切换日历视图模式（时间轴 / 待办卡片）并持久化 */
+  setCalendarViewMode(mode: "timeline" | "todo"): void {
+    this.calendarViewMode = mode;
+    if (!persist) return;
+    uiSetCalendarViewMode(mode).catch((err) =>
+      console.error("[setCalendarViewMode] 保存日历视图模式失败", err),
+    );
+  }
+
+  /**
+   * D-1：更新指标「常显」字段（立即改内存态 → 写盘；失败仅日志，不阻断勾选）。
+   * 入参会按 METRIC_FIELDS 顺序归一化；空数组合法（= 全部收进「更多指标」）。
+   */
+  setMetricPinned(keys: string[]): void {
+    const next = METRIC_FIELDS.filter((k) => keys.includes(k));
+    this.metricPinned = next;
+    if (!persist) return;
+    metricsSetPinned(next).catch((err) =>
+      console.error("[setMetricPinned] 保存常显设置失败", err),
+    );
+  }
+
+  /* ---- D-5：仪表盘编排（顺序 / 显隐 / R-1b 视图模式 / R-1d 热力图顺序；立即改内存态 → 写盘） ---- */
+
+  /** D-5：写入卡片顺序（R-1b：数据屏的指标卡与趋势曲线共用此序） */
+  setDashboardOrder(order: string[]): void {
+    this.dashboardOrder = [...order];
+    void this.saveDashboard();
+  }
+
+  /** D-5：写入隐藏卡片键集合（数据保留，仅不呈现） */
+  setDashboardHidden(hidden: string[]): void {
+    this.dashboardHidden = [...hidden];
+    void this.saveDashboard();
+  }
+
+  /** R-1b：切换仪表盘视图（数据屏 / 热力图屏） */
+  setDashboardViewMode(mode: "data" | "heatmap"): void {
+    this.dashboardViewMode = mode;
+    void this.saveDashboard();
+  }
+
+  /** R-1d：写入热力图屏的板块顺序（板块 id 列表；空 = 按 life 目录序） */
+  setDashboardHeatmapOrder(ids: string[]): void {
+    this.dashboardHeatmapOrder = [...ids];
+    void this.saveDashboard();
+  }
+
+  /** R-1d：拖动排序——把 `from` 落到 `to` 处（往下拖 = 插到其后，往上拖 = 插到其前） */
+  moveDashboardKey(from: string, to: string): void {
+    const list = [...this.effDashboardOrder];
+    const i = list.indexOf(from);
+    const j = list.indexOf(to);
+    if (i < 0 || j < 0 || i === j) return;
+    list.splice(i, 1);
+    // 移除后目标的新下标：i<j → j-1（插到其后即原 j 处）；i>j → j（插到其前）
+    list.splice(j, 0, from);
+    this.setDashboardOrder(list);
+  }
+
+  /** D-5：恢复默认编排（清空顺序 / 显隐 / 热力图顺序；视图模式属浏览偏好，不重置） */
+  resetDashboard(): void {
+    this.dashboardOrder = [];
+    this.dashboardHidden = [];
+    this.dashboardHeatmapOrder = [];
+    void this.saveDashboard();
+  }
+
+  /** D-5：持久化仪表盘编排（失败仅日志，不阻断交互） */
+  private async saveDashboard(): Promise<void> {
+    if (!persist) return;
+    try {
+      const cfg: DashboardCfg = {
+        order: this.dashboardOrder,
+        hidden: this.dashboardHidden,
+        view_mode: this.dashboardViewMode,
+        heatmap_order: this.dashboardHeatmapOrder,
+      };
+      await dashboardSetConfig(cfg);
+    } catch (err) {
+      console.error("[saveDashboard] 保存仪表盘编排失败", err);
+    }
+  }
+
+  /* ---- E-1：数据追踪项增删改（自定义项 + 内置项隐藏覆盖） ---- */
+
+  /** 新建自定义追踪项；键已被占用时返回错误文案（不落盘） */
+  addTracker(def: TrackerDef): string | null {
+    if (this.trackers.some((t) => t.key === def.key)) return "该英文键名已被占用";
+    this.customTrackers = [...this.customTrackers, { ...def, builtin: false }];
+    void this.saveTrackers();
+    return null;
+  }
+
+  /** 更新自定义追踪项（改名 / 单位 / 类型 / 方向） */
+  updateTracker(key: string, patch: Partial<TrackerDef>): void {
+    this.customTrackers = this.customTrackers.map((t) =>
+      t.key === key ? { ...t, ...patch, key: t.key, builtin: false } : t,
+    );
+    void this.saveTrackers();
+  }
+
+  /**
+   * 删除自定义追踪项：仅从追踪表移除，**不删日记文件里的历史数据**
+   * （`x_` 键在既有文件中原样保留，重新新建同名键即恢复图表）。
+   */
+  removeTracker(key: string): void {
+    this.customTrackers = this.customTrackers.filter((t) => t.key !== key);
+    void this.saveTrackers();
+  }
+
+  /** 隐藏 / 显示某追踪项（内置项落 hiddenBuiltins，自定义项改 def.hidden） */
+  setTrackerHidden(key: string, hidden: boolean): void {
+    if (ALL_BUILTIN_TRACKERS.some((t) => t.key === key)) {
+      this.hiddenBuiltins = hidden
+        ? [...new Set([...this.hiddenBuiltins, key])]
+        : this.hiddenBuiltins.filter((k) => k !== key);
+    } else {
+      this.updateTracker(key, { hidden });
+      return;
+    }
+    void this.saveTrackers();
+  }
+
+  private async saveTrackers(): Promise<void> {
+    if (!persist) return;
+    try {
+      const list: TrackerCfg[] = [
+        ...this.hiddenBuiltins.map((key) => ({
+          key,
+          name: "",
+          unit: "",
+          kind: "number" as const,
+          direction: "up" as const,
+          builtin: true,
+          hidden: true,
+        })),
+        ...this.customTrackers.map(trackerDefToCfg),
+      ];
+      await trackersSetConfig(list);
+    } catch (err) {
+      console.error("[saveTrackers] 写入数据追踪项失败", err);
     }
   }
 
@@ -301,7 +806,7 @@ class AppState {
         const note = this.getNote(date);
         const rel = this.dailyPath(date);
         let text: string | null = await fsRead(rel).catch(() => null);
-        if (text === null) text = buildDailyFile(date, note.metrics);
+        if (text === null) text = buildDailyFile(date, note.metrics, note.metricsExtra);
         if (aspects.has("tasks")) text = writeTasks(text, note.tasks);
         if (aspects.has("notes")) text = writeNotes(text, note.notes);
         if (aspects.has("review")) text = writeReview(text, note.review);
@@ -314,7 +819,7 @@ class AppState {
         if (aspects.has("schedules")) {
           text = writeSchedules(text, date, this.events);
         }
-        if (aspects.has("metrics")) text = writeMetrics(text, note.metrics, date);
+        if (aspects.has("metrics")) text = writeMetrics(text, note.metrics, note.metricsExtra, date);
         await fsWrite(rel, text);
         actions.push(`${date}（${[...aspects].map((a) => ASPECT_LABEL[a]).join("、")}）`);
       }
@@ -347,6 +852,7 @@ class AppState {
         notes: "",
         review: "",
         metrics: emptyMetrics(),
+        metricsExtra: emptyMetricsExtra(),
       }
     );
   }
@@ -360,6 +866,7 @@ class AppState {
         notes: "",
         review: "",
         metrics: emptyMetrics(),
+        metricsExtra: emptyMetricsExtra(),
       };
     }
     return this.dailyNotes[date];
@@ -408,6 +915,69 @@ class AppState {
     this.markDirty(tomorrow, "tasks");
   }
 
+  /** D-4b：清除某日某章节的「待写回」标记（立即写盘后调用，避免 debounce 到期重复写） */
+  private clearDirty(date: string, aspect: DailyAspect): void {
+    const set = this.dirtyDaily.get(date);
+    if (!set) return;
+    set.delete(aspect);
+    if (set.size === 0) this.dirtyDaily.delete(date);
+  }
+
+  /** D-4b：立即写回某日「任务清单」章节（不参与 debounce；跨天搬任务需两侧即时一致） */
+  private async writeTasksOnly(date: string): Promise<void> {
+    const note = this.getNote(date);
+    const rel = this.dailyPath(date);
+    let text: string | null = await fsRead(rel).catch(() => null);
+    if (text === null) text = buildDailyFile(date, note.metrics, note.metricsExtra);
+    text = writeTasks(text, note.tasks);
+    await fsWrite(rel, text);
+  }
+
+  /**
+   * D-4b：把某任务从 fromDate 搬到 toDate（跨天改期）。
+   * 内存先行 + 立即双写（不走 debounce，保证两侧磁盘一致）；写盘失败则内存回滚并返回错误文案。
+   * 返回 null = 成功；返回字符串 = 失败原因（由视图内联展示）。
+   */
+  async moveTask(fromDate: string, taskId: string, toDate: string): Promise<string | null> {
+    if (fromDate === toDate) return null;
+    const src = this.getNote(fromDate);
+    const moved = src.tasks.find((x) => x.id === taskId);
+    if (!moved) return "任务不存在（可能已被删除）";
+    const hadDst = !!this.dailyNotes[toDate];
+    const snapshotFrom = [...src.tasks];
+    const dst = this.getNote(toDate);
+    const snapshotTo = [...dst.tasks];
+    // 内存先行：源删除、目标追加（保留完成态；deferredFrom 记为来源日）
+    src.tasks = src.tasks.filter((x) => x.id !== taskId);
+    dst.tasks.push({
+      id: genId("task"),
+      text: moved.text,
+      done: moved.done,
+      deferredFrom: fromDate,
+    });
+    this.clearDirty(fromDate, "tasks");
+    this.clearDirty(toDate, "tasks");
+    if (!persist) return null;
+    try {
+      await this.writeTasksOnly(fromDate);
+      await this.writeTasksOnly(toDate);
+      await gitAutoCommit(`任务改期：${fromDate} → ${toDate} · ${nowHHmm()}`);
+      return null;
+    } catch (err) {
+      console.error("[moveTask] 写盘失败，已回滚内存", err);
+      src.tasks = snapshotFrom;
+      if (hadDst) dst.tasks = snapshotTo;
+      else delete this.dailyNotes[toDate];
+      // 尽力把源文件写回原状（可能已写入一半）
+      try {
+        await this.writeTasksOnly(fromDate);
+      } catch {
+        /* 回滚写盘失败仅日志（内存已恢复） */
+      }
+      return "改期失败：数据写入出错，已恢复原状态";
+    }
+  }
+
   /** 任务右键关联/取消关联板块（v4.9 GUI）：勾选 = 追加 `#goal/<板块名>`，取消 = 移除标签 */
   toggleTaskGoal(date: string, taskId: string, boardName: string, linked: boolean): void {
     const t = this.getNote(date).tasks.find((x) => x.id === taskId);
@@ -429,9 +999,26 @@ class AppState {
   }
 
   /* ---- 量化指标 ---- */
-  setMetrics(date: string, patch: Partial<DailyMetrics>): void {
+
+  /**
+   * 写入量化指标（内置 9 键走 patch；E-1 自定义指标走 extraPatch，键为 `x_<slug>`）。
+   * 语义：`null` 清除该项；`undefined`（键缺省）不动该项。
+   */
+  setMetrics(
+    date: string,
+    patch: Partial<DailyMetrics>,
+    extraPatch?: Record<string, number | string | null>,
+  ): void {
     const n = this.getNote(date);
     n.metrics = { ...n.metrics, ...patch };
+    if (extraPatch) {
+      const next: Record<string, number | string | null> = { ...n.metricsExtra };
+      for (const [k, v] of Object.entries(extraPatch)) {
+        if (v === null || v === undefined) delete next[k];
+        else next[k] = v;
+      }
+      n.metricsExtra = next;
+    }
     this.markDirty(date, "metrics");
   }
 
@@ -1007,6 +1594,110 @@ class AppState {
     }
   }
 
+  /* ---- D-6：封存盒（life/_archived/）+ 重启 + 留痕 / 停滞 ---- */
+
+  /** 最近留痕日期：该板块出现在日记任务标签里的最大日期（存档历史也算）；null = 尚无痕迹 */
+  boardLastTrace(boardName: string): string | null {
+    let last: string | null = null;
+    for (const [date, note] of Object.entries(this.dailyNotes)) {
+      if (note.tasks.some((t) => hasGoalTag(t.text, boardName))) {
+        if (!last || date > last) last = date;
+      }
+    }
+    const arch = this.goalStats[boardName];
+    if (arch) {
+      for (const [date, count] of Object.entries(arch)) {
+        if (count > 0 && (!last || date > last)) last = date;
+      }
+    }
+    return last;
+  }
+
+  /** 距最近留痕的天数（无痕迹 = null） */
+  boardDaysSinceTrace(boardName: string): number | null {
+    const last = this.boardLastTrace(boardName);
+    if (!last) return null;
+    const ms = fromDateKey(todayKey()).getTime() - fromDateKey(last).getTime();
+    return Math.max(0, Math.round(ms / 86400000));
+  }
+
+  /** 是否停滞：≥14 天无留痕（无痕迹不判停滞，避免新建板块被误标） */
+  boardStalled(boardName: string): boolean {
+    const d = this.boardDaysSinceTrace(boardName);
+    return d !== null && d >= STALL_DAYS;
+  }
+
+  /**
+   * D-6：封存板块 = life/<名>/ → life/_archived/<名>/（内存先行，UI 即时）。
+   * 热力图历史先固化进 life/goal-stats.md（不删）；默认文档 frontmatter 写 `archived: <日期>`。
+   */
+  archiveBoard(id: string): void {
+    const b = this.lifeBoards.find((x) => x.id === id);
+    if (!b) return;
+    const name = b.name;
+    const date = todayKey();
+    this.lifeBoards = this.lifeBoards.filter((x) => x.id !== id);
+    this.archivedBoards = [...this.archivedBoards, { name, archivedAt: date }];
+    if (this.selectedLifeBoardId === id) this.selectedLifeBoardId = null;
+    if (this.openedLifeBoardId === id) {
+      this.openedLifeBoardId = null;
+      this.openedBoardFileId = null;
+    }
+    this.archiveBoardStats(name, name);
+    for (const rel of [...this.dirtyBoards]) {
+      if (rel.startsWith(`life/${name}/`)) this.dirtyBoards.delete(rel);
+    }
+    this.boardNotice = `板块「${name}」已封存到 life/_archived/；热力图历史保留在 life/goal-stats.md。`;
+    if (persist) {
+      void (async () => {
+        try {
+          await this.saveGoalStats();
+          await fsMkdir(ARCHIVE_DIR);
+          await fsRename(`life/${name}`, `${ARCHIVE_DIR}/${name}`);
+          const defRel = `${ARCHIVE_DIR}/${name}/${name}.md`;
+          const text = await fsRead(defRel).catch(() => null);
+          if (text !== null) await fsWrite(defRel, writeFrontmatterKey(text, ARCHIVED_KEY, date));
+          await gitAutoCommit(
+            `封存人生板块：${name}（文件移至 life/_archived/，热力图历史保留） · ${nowHHmm()}`,
+          );
+        } catch (err) {
+          console.error("[archiveBoard] 落盘失败", err);
+        }
+      })();
+    }
+  }
+
+  /**
+   * D-6：重启封存板块 = life/_archived/<名>/ → life/<名>/（默认文档 `archived:` 清为 null）。
+   * 返回错误文案（null = 成功）；life/ 下已有同名板块时拒绝。
+   */
+  async restoreBoard(name: string): Promise<string | null> {
+    if (this.lifeBoards.some((b) => b.name === name)) {
+      return `已存在同名板块「${name}」，请先为其改名或删除，再重启该封存板块`;
+    }
+    if (!this.archivedBoards.some((a) => a.name === name)) return `封存盒中没有「${name}」`;
+    let board: LifeBoard;
+    if (persist) {
+      try {
+        await fsRename(`${ARCHIVE_DIR}/${name}`, `life/${name}`);
+        const defRel = `life/${name}/${name}.md`;
+        const text = await fsRead(defRel).catch(() => null);
+        if (text !== null) await fsWrite(defRel, writeFrontmatterKey(text, ARCHIVED_KEY, null));
+        await gitAutoCommit(`重启人生板块：${name}（从 life/_archived/ 恢复） · ${nowHHmm()}`);
+        board = await this.readBoard(name);
+      } catch (err) {
+        console.error("[restoreBoard] 落盘失败", err);
+        return `恢复失败：${String(err)}`;
+      }
+    } else {
+      board = { id: genId("life"), name, icon: "svg:点子", files: [] };
+    }
+    this.archivedBoards = this.archivedBoards.filter((a) => a.name !== name);
+    this.lifeBoards = [...this.lifeBoards, board];
+    this.boardNotice = `板块「${name}」已从封存盒重启。`;
+    return null;
+  }
+
   /* ---- 番茄钟计时（双模式；倒计时到点自动记录，正计时停表即记录） ---- */
 
   /** 倒计时开始（自定义分钟数 + 标题） */
@@ -1079,6 +1770,23 @@ class AppState {
     this.setMetrics(todayKey(), { focus_minutes: today + minutes });
   }
 
+  /**
+   * D-3(a) / E-4：删除一条专注记录。
+   * 该日 focus_minutes 必须**整日重算**（记录是「加」，删除不能简单做减法），
+   * 删完若当日已无记录则回落 null；同时写回 ## 专注记录 与 frontmatter 两个章节。
+   */
+  removeFocusSession(id: string): void {
+    const target = this.focusSessions.find((x) => x.id === id);
+    if (!target) return;
+    const date = target.date;
+    this.focusSessions = this.focusSessions.filter((x) => x.id !== id);
+    const total = this.focusSessions
+      .filter((x) => x.date === date)
+      .reduce((acc, x) => acc + x.minutes, 0);
+    this.markDirty(date, "focus");
+    this.setMetrics(date, { focus_minutes: total > 0 ? total : null });
+  }
+
   /** 每秒 tick：仅在 running 时推进；倒计时到 0 自动记录 */
   private ensureTick(): void {
     if (tickHandle !== null) return;
@@ -1096,6 +1804,166 @@ class AppState {
   gotoSection(s: SectionId): void {
     this.section = s;
     if (s === "today") this.selectedDate = todayKey();
+    // E-2：刚在设置页打开简报开关时，离开设置页立即补一次判定（不必干等 60s 定时器）
+    if (s !== "settings" && s !== "chat") this.checkBriefingDue();
+  }
+
+  /**
+   * R-2b：把某天设为「日历选中日」，供左侧「日程」栏联动（不切分区）。
+   * 磁盘已有该日记而内存未载（应用运行期外部写入）→ 解析装载，避免左栏误显空态；
+   * 磁盘尚不存在该日记 → 保持空态、**不代用户落盘**（只是看一眼，不该写出文件）。
+   */
+  selectDay(date: string): void {
+    this.selectedDate = date;
+    if (persist && !this.dailyNotes[date]) {
+      void (async () => {
+        try {
+          const text = await fsRead(this.dailyPath(date)).catch(() => null);
+          if (text === null) return;
+          const p = parseDaily(text, date);
+          this.dailyNotes[date] = {
+            date,
+            tasks: p.tasks,
+            notes: p.notes,
+            review: p.review,
+            metrics: p.metrics,
+            metricsExtra: p.metricsExtra,
+          };
+        } catch (err) {
+          console.error("[selectDay] 装载日记失败", err);
+        }
+      })();
+    }
+  }
+
+  /* ---- E-2 / E-3：每周罗盘简报 + 此刻最该动的一件事 ---- */
+
+  /** E-2：起页面级定时器（只起一次）并立即做一次到点 / 补发判定 */
+  startBriefingWatch(): void {
+    if (briefingTimer === null) {
+      briefingTimer = setInterval(() => this.checkBriefingDue(), 60_000);
+    }
+    this.checkBriefingDue();
+  }
+
+  /** E-2：保存简报设置（合并写回 config.briefing；不改 `last_shown`，避免设置页误清补发状态） */
+  async setBriefing(enabled: boolean, weekday: number, time: string): Promise<void> {
+    this.briefingEnabled = enabled;
+    this.briefingWeekday = briefWeekday(weekday);
+    this.briefingTime = briefTime(time);
+    try {
+      await briefingSetConfig(this.briefingEnabled, this.briefingWeekday, this.briefingTime);
+    } catch (err) {
+      console.error("[setBriefing] 保存失败", err);
+    }
+    // 刚打开开关且本周时刻已过 → 立刻补发一次（否则要等到下周）
+    this.checkBriefingDue();
+  }
+
+  /** E-2：本地聚合本周数据 → 简报内容（纯本地，不调 AI、不落盘） */
+  buildBriefing(): BriefingResult {
+    return buildBriefing({
+      notes: this.dailyNotes,
+      focus: this.focusSessions,
+      boards: this.lifeBoards.map((b) => ({
+        name: b.name,
+        daysSinceTrace: this.boardDaysSinceTrace(b.name),
+      })),
+      today: todayKey(),
+    });
+  }
+
+  /** E-2：打开简报弹层（现算内容；有数据 AI Key 时异步替换建议为 AI 结论） */
+  openBriefing(): void {
+    this.briefingData = this.buildBriefing();
+    this.briefingOpen = true;
+    void this.refreshBriefingAi();
+  }
+
+  /** E-2：预览简报（设置页「立即预览」用，不改 last_shown） */
+  previewBriefing(): void {
+    this.openBriefing();
+  }
+
+  /** E-2：有 key 时让数据 AI 给一句话结论覆盖规则模板（失败静默，保留模板） */
+  private async refreshBriefingAi(): Promise<void> {
+    if (!persist) return;
+    try {
+      const cfg = await aiGetConfig();
+      if (!cfg.data_key_saved && !cfg.key_saved) return;
+      const d = this.briefingData;
+      if (!d) return;
+      const text = [
+        `本周区间：${d.dateRange}`,
+        "关键指标：",
+        ...d.metricLines.map((l) => `- ${l}`),
+        "板块痕迹：",
+        ...d.boardLines.map((l) => `- ${l}`),
+        d.focusLine,
+        d.taskLine,
+        "请用一句话给出本周最该调整的一件事（不超过 40 字，直接给建议，不要客套）。",
+      ].join("\n");
+      const answer = await dataAnalyzeAsk(
+        [{ role: "user", content: text }],
+        text,
+      );
+      const one = answer.trim().split("\n").filter(Boolean)[0]?.trim();
+      if (one && this.briefingData) {
+        this.briefingData = { ...this.briefingData, suggestion: one };
+      }
+    } catch (err) {
+      console.error("[refreshBriefingAi] AI 建议失败（保留规则模板）", err);
+    }
+  }
+
+  /** E-2：到点 / 启动补发判定（loadAll 后、设置变更后、页面级定时器调用） */
+  checkBriefingDue(): void {
+    if (this.briefingOpen) return;
+    const s = this.section;
+    // 在设置页浏览时不弹（离开后下一分钟仍会补上）；编辑日记 / 隆中对时也不打断
+    if (s === "settings" || s === "chat") return;
+    if (isBriefingDue(new Date(), this.briefingEnabled, this.briefingWeekday, this.briefingTime, this.briefingLastShown)) {
+      this.openBriefing();
+    }
+  }
+
+  /** E-2：关闭简报并记录弹出时刻（[现在开始] 与 [稍后] 都走这里，避免重启后重复弹） */
+  async dismissBriefing(): Promise<void> {
+    this.briefingOpen = false;
+    this.briefingLastShown = stamp(new Date());
+    if (!persist) return;
+    try {
+      await briefingSetLastShown(this.briefingLastShown);
+    } catch (err) {
+      console.error("[dismissBriefing] 记录弹出时刻失败", err);
+    }
+  }
+
+  /**
+   * E-3：首页「此刻最该动的一件事」——一次点击即挑一条并开正计时。
+   * 候选：停滞板块（≥14 天无痕迹）优先、按停滞天数降序取一条；否则今日未完成清单第一条。
+   * 都没有 → 只显示结束语（不报错、不跳转）。
+   */
+  pickAndStartFocus(): void {
+    const today = todayKey();
+    const boards = this.lifeBoards.map((b) => ({
+      name: b.name,
+      daysSinceTrace: this.boardDaysSinceTrace(b.name),
+    }));
+    const tasks = this.peekNote(today).tasks;
+    const pick = pickFocus(boards, tasks);
+    if (!pick) {
+      this.focusPickNotice = focusClosing();
+      return;
+    }
+    this.focusPickNotice = null;
+    if (this.timer.phase === "idle") {
+      this.startStopwatch(pick.title);
+      this.gotoSection("pomodoro");
+    } else {
+      // 已有计时在跑：不打断，跳到番茄钟让用户看到当前计时
+      this.gotoSection("pomodoro");
+    }
   }
 
   /* ---- 日记路径（v4.6）：收藏后为 star-yyyy-mm-dd.md ---- */
@@ -1128,6 +1996,7 @@ class AppState {
               notes: p.notes,
               review: p.review,
               metrics: p.metrics,
+              metricsExtra: p.metricsExtra,
             };
             // 同步装载该日日程（替换式：以磁盘现文为准，避免运行期重复装载）
             this.events = [
@@ -1210,6 +2079,7 @@ class AppState {
       notes: p.notes,
       review: p.review,
       metrics: p.metrics,
+      metricsExtra: p.metricsExtra,
     };
     this.events = [
       ...this.events.filter((e) => e.date !== date),
@@ -1221,15 +2091,9 @@ class AppState {
     ];
   }
 
-  /** 窗口 resize：更新宽度并同步右栏可见性（≥1280 跟随手动开关；<1280 自动收起） */
+  /** 窗口 resize：更新宽度（详情栏可见性由 detailVisible 派生，按分区记忆 + 宽屏阈值） */
   syncWinWidth(): void {
     this.winWidth = window.innerWidth;
-    this.detailVisible = this.winWidth >= 1280 && !this.detailHidden;
-  }
-
-  toggleDetail(): void {
-    this.detailHidden = !this.detailHidden;
-    this.detailVisible = this.winWidth >= 1280 && !this.detailHidden;
   }
 
   /**

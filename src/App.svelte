@@ -11,6 +11,7 @@
   import DailyEditor from "./components/today/DailyEditor.svelte";
   import CalendarPage from "./components/calendar/CalendarPage.svelte";
   import DashboardPage from "./components/dashboard/DashboardPage.svelte";
+  import WeeklyBriefing from "./components/dashboard/WeeklyBriefing.svelte";
   import LifeBoardPage from "./components/life/LifeBoardPage.svelte";
   import PomodoroPage from "./components/pomodoro/PomodoroPage.svelte";
   import ChatPage from "./components/chat/ChatPage.svelte";
@@ -106,6 +107,18 @@
   />
 {/if}
 
+<!-- E-2：每周罗盘简报（到点 / 启动补发时打开；一个弹层两个按钮） -->
+{#if app.briefingOpen && app.briefingData}
+  <WeeklyBriefing
+    data={app.briefingData}
+    onStart={() => {
+      void app.dismissBriefing();
+      app.pickAndStartFocus();
+    }}
+    onLater={() => void app.dismissBriefing()}
+  />
+{/if}
+
 {#if tooNarrow}
   <div class="app-root">
     <AppHeader />
@@ -128,14 +141,16 @@
             回到今天
           </button>
         {/if}
-        <button
-          class="btn-secondary detail-toggle"
-          title={app.detailHidden ? "展开详情栏" : "收起详情栏"}
-          onclick={() => app.toggleDetail()}
-        >
-          <Icon name="help" size={21} />
-          {app.detailHidden ? "详情" : "收起详情"}
-        </button>
+        {#if app.detailSupported}
+          <button
+            class="btn-secondary detail-toggle"
+            title={app.detailVisible ? "收起详情栏" : "展开详情栏"}
+            onclick={() => app.toggleDetail()}
+          >
+            <Icon name="help" size={21} />
+            {app.detailVisible ? "收起详情" : "详情"}
+          </button>
+        {/if}
       </header>
 
       <div class="main-body">

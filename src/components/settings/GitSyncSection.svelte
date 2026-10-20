@@ -5,26 +5,18 @@
   // v4.29：新增「认证方式」——auto（默认，交给本机 git，免输入）/ token（注入私人令牌）。
   import { onMount } from "svelte";
   import Icon from "../common/Icon.svelte";
+  import GitAuthGuide from "./GitAuthGuide.svelte";
+  import GitTimingBlock from "./GitTimingBlock.svelte";
   import {
     persist,
     gitSyncGetConfig,
     gitSyncSetConfig,
     gitSyncNow,
-    openUrlHttps,
     type GitPlatform,
     type GitAuth,
   } from "../../lib/tauri-fs";
   import { refreshSyncSchedule } from "../../lib/git-sync-schedule";
   import { manual } from "../../stores/manual.svelte";
-
-  /** 令牌生成页（「获取令牌」按钮目标；GitHub 已预勾 repo 权限） */
-  const TOKEN_URL: Record<GitPlatform, string> = {
-    github: "https://github.com/settings/tokens/new?scopes=repo&description=CompassZha%20data%20sync",
-    gitee: "https://gitee.com/profile/personal_access_tokens",
-  };
-
-  /** 定时同步档位（分钟；0 = 关闭），与 Rust 侧白名单一致 */
-  const INTERVALS: number[] = [0, 5, 15, 30, 60];
 
   let platform = $state<GitPlatform>("github");
   let auth = $state<GitAuth>("auto");
@@ -49,15 +41,6 @@
       ? "https://gitee.com/<你的用户名>/<仓库名>.git"
       : "https://github.com/<用户名>/<仓库名>.git",
   );
-  const tokenLabel = $derived(isGitee ? "Gitee 私人令牌" : "GitHub 访问令牌（PAT）");
-  const tokenHint = $derived(
-    tokenSaved
-      ? "已保存——输入新值可替换"
-      : isGitee
-        ? "Gitee 私人令牌（只存系统凭据管理器，不写任何文件）"
-        : "ghp_…（只存系统凭据管理器，不写任何文件）",
-  );
-
   const fmtTime = (secs: number | null): string =>
     secs == null ? "从未同步" : new Date(secs * 1000).toLocaleString("zh-CN");
 
@@ -89,25 +72,23 @@
     loaded = true;
   });
 
-  /** 打开对应平台的令牌生成页；Tauri 外链失败回退 window.open（沿用 AuthorDialog 范式） */
-  async function openTokenPage() {
-    const url = TOKEN_URL[platform];
-    try {
-      await openUrlHttps(url);
-    } catch {
-      window.open(url, "_blank");
-    }
+  /**
+   * 保存配置。令牌输入为空 → 传 null（保持已存令牌不动）。
+   * v4.40 C-2：抽成「不吞异常」的内核，供「测试并保存」复用（失败需回显在引导区）。
+   */
+  async function saveSilently(): Promise<void> {
+    const t = token.trim();
+    await gitSyncSetConfig(enabled, platform, auth, onStart, intervalMin, remote, branch, t ? t : null);
+    token = "";
+    await applyCfg();
+    await refreshSyncSchedule();
   }
 
-  /** 保存配置。令牌输入为空 → 传 null（保持已存令牌不动）。 */
+  /** 「保存配置」按钮：保存并把结果写进本区反馈行 */
   async function save() {
     busy = true;
     try {
-      const t = token.trim();
-      await gitSyncSetConfig(enabled, platform, auth, onStart, intervalMin, remote, branch, t ? t : null);
-      token = "";
-      await applyCfg();
-      await refreshSyncSchedule();
+      await saveSilently();
       notice("配置已保存");
     } catch (e) {
       notice(`${e}`, true);
@@ -150,6 +131,8 @@
     </span>
   </div>
 
+  <p class="banner">同步是可选的：不配也能正常用，数据都存在本机。想让数据多设备同步时再来配。</p>
+
   {#if !persist}
     <p class="banner">浏览器预览模式 —— 数据同步需在桌面应用内配置（步骤见右上角「说明书」）</p>
   {:else if !loaded}
@@ -174,38 +157,23 @@
       </select>
     </label>
 
-    {#if isAuto}
-      <p class="sub-note">
-        自动：认证交给本机 git（https 走系统凭据管理器、SSH 走 ~/.ssh 密钥），无需令牌。
-        <button class="link-btn" onclick={() => manual.openManual()}>详见说明书</button>
-      </p>
-    {/if}
+    <p class="sub-note">
+      拿不定主意就选「自动」。
+      <button class="link-btn" onclick={() => manual.openManual()}>详见说明书</button>
+    </p>
 
-    <div class="sub-block">
-      <h3 class="sub-title">同步时机</h3>
-      <p class="sub-note">
-        默认仅「打开软件时」同步一次；下面两项按需开启。三者都需先填仓库地址{#if !isAuto}并保存令牌{/if}。
-      </p>
-      <label class="switch-row">
-        <input type="checkbox" bind:checked={onStart} />
-        <span>打开软件时同步（本次对比本地变更并提交推送一次）</span>
-      </label>
-      <label class="switch-row">
-        <input type="checkbox" bind:checked={enabled} />
-        <span>每次保存后同步（每次本地提交后立即推送）</span>
-      </label>
-      <label class="field">
-        <span class="label">定时同步</span>
-        <select
-          value={intervalMin}
-          onchange={(e) => (intervalMin = Number(e.currentTarget.value))}
-        >
-          {#each INTERVALS as m (m)}
-            <option value={m}>{m === 0 ? "关闭" : `每 ${m} 分钟`}</option>
-          {/each}
-        </select>
-      </label>
-    </div>
+    <GitAuthGuide
+      {platform}
+      {auth}
+      {remote}
+      {tokenSaved}
+      {busy}
+      bind:token
+      onSaveTest={saveSilently}
+      onClearToken={() => void clearToken()}
+    />
+
+    <GitTimingBlock bind:onStart bind:enabled bind:intervalMin {isAuto} />
 
     <label class="field">
       <span class="label">仓库地址（{hostLabel} 私密仓，https:// 或 SSH 形式）</span>
@@ -216,22 +184,6 @@
       <span class="label">同步分支</span>
       <input type="text" bind:value={branch} placeholder="main" />
     </label>
-
-    {#if !isAuto}
-      <label class="field">
-        <span class="label">{tokenLabel}</span>
-        <input type="password" bind:value={token} placeholder={tokenHint} autocomplete="off" />
-      </label>
-
-      <div class="actions">
-        <button class="btn-secondary" onclick={() => void openTokenPage()}>获取令牌</button>
-        {#if tokenSaved}
-          <button class="btn-secondary" onclick={() => void clearToken()} disabled={busy}>
-            清除已存令牌
-          </button>
-        {/if}
-      </div>
-    {/if}
 
     <p class="sync-status">上次同步：{fmtTime(lastSync)}</p>
 
@@ -254,109 +206,67 @@
     padding: var(--space-4);
     max-width: 560px;
   }
-
   .block-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-
   .block-title {
+    margin: 0;
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--color-title);
-    margin: 0;
   }
-
+  /* 图标随 currentColor —— 浅色近黑 / 深色近白 */
   .head-ico {
     display: inline-flex;
-    /* 图标随 currentColor —— 浅色近黑 / 深色近白 */
     color: var(--color-text-primary);
   }
-
   .banner {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
     background-color: var(--color-surface-alt);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3);
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
-    margin: 0;
   }
-
-  .switch-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-  }
-
   .field {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
   }
-
+  .field input {
+    width: 100%;
+  }
   .label {
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
   }
-
-  .field input {
-    width: 100%;
-  }
-
   .sync-status {
+    margin: 0;
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
-    margin: 0;
   }
-
   .actions {
     display: flex;
     gap: var(--space-2);
   }
-
   .feedback {
+    margin: 0;
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
-    margin: 0;
   }
-
   .feedback.err {
-    color: var(--color-danger, #dc2626);
+    color: var(--color-danger);
   }
-
-  .sub-block {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    border: 1px dashed var(--color-border);
-    border-radius: 8px;
-  }
-
-  .sub-title {
-    font-size: var(--font-size-sm);
-    margin: 0;
-  }
-
-  .sub-note {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-tertiary);
-    margin: 0;
-    line-height: 1.6;
-  }
-
   .link-btn {
     padding: 0;
     margin-left: var(--space-1);
-    font-size: var(--font-size-xs);
-    color: var(--color-primary);
     background: none;
     border: none;
+    font-size: var(--font-size-xs);
+    color: var(--color-primary);
     cursor: pointer;
     text-decoration: underline;
     white-space: nowrap;

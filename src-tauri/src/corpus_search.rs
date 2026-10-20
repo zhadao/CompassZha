@@ -147,7 +147,137 @@ pub fn corpus_search(
     Ok(hits)
 }
 
-/// 单文件打分：文件级命中（路径/文件名含关键词或卡名）整段加权，段落按关键词出现次数计分。
+/// D-8①：语料库统计（前端用于「语料还是空的」轻提示；不阻断对话）。
+#[derive(Serialize, Clone)]
+pub struct CorpusStats {
+    pub file_count: u32,
+    pub dir_count: u32,
+}
+
+/// D-8①：递归统计 dataRoot/corpus/ 下的可用语料文件数与子目录数。
+/// 排除口径与 corpus_search 完全一致（同样的脚手架目录 / 元文件黑名单）——
+/// 保证「统计为 0」与「检索为空」两种表现不会互相矛盾。
+#[tauri::command(async)]
+pub fn corpus_stats() -> Result<CorpusStats, String> {
+    let root = fs_cmds::data_root().join("corpus");
+    let mut file_count = 0u32;
+    let mut dir_count = 0u32;
+    let mut stack: Vec<PathBuf> = vec![root];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if p.file_name().map(|n| is_meta_dir(&n.to_string_lossy())).unwrap_or(false) {
+                    continue;
+                }
+                dir_count += 1;
+                stack.push(p);
+            } else if is_supported_ext(&p) {
+                if p.file_stem().map(|s| is_meta_file(&s.to_string_lossy())).unwrap_or(false) {
+                    continue;
+                }
+                file_count += 1;
+            }
+        }
+    }
+    Ok(CorpusStats {
+        file_count,
+        dir_count,
+    })
+}
+
+/// 拆出 frontmatter 的 `title` 与正文起始行号（首行非 `---` 时视为无 frontmatter）。
+/// 未找到闭合 `---` 时返回 (None, 0)，即维持「整篇作为一段、因以 --- 开头被跳过」的旧行为。
+fn split_frontmatter(lines: &[&str]) -> (Option<String>, usize) {
+    if !lines.first().map(|l| l.trim() == "---").unwrap_or(false) {
+        return (None, 0);
+    }
+    let mut title = None;
+    for (i, raw) in lines.iter().enumerate().skip(1) {
+        let l = raw.trim();
+        if l == "---" {
+            return (title, i + 1);
+        }
+        if title.is_none() {
+            if let Some(v) = l.strip_prefix("title:") {
+                let t = v.trim().trim_matches('"').trim_matches('\'').trim().to_string();
+                if !t.is_empty() {
+                    title = Some(t);
+                }
+            }
+        }
+    }
+    (None, 0)
+}
+
+/// 正文首个一级标题（`# `）；无则 None。
+fn first_h1(body: &str) -> Option<String> {
+    body.lines().find_map(|l| {
+        l.trim()
+            .strip_prefix("# ")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    })
+}
+
+/// 剥离 Markdown 链接目标（`](http…)` → `]`），只保留方括号内的链接文字。
+/// 语料为视频转写稿时行首是 `[hh:mm:ss](https://…) *说话人*：`，URL 不剥离会挤占片段预算。
+fn strip_link_targets(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == ']' && it.peek() == Some(&'(') {
+            it.next();
+            let mut buf = String::new();
+            let mut closed = false;
+            for c2 in it.by_ref() {
+                if c2 == ')' {
+                    closed = true;
+                    break;
+                }
+                if c2 == '\n' || c2 == ' ' {
+                    break;
+                }
+                buf.push(c2);
+            }
+            out.push(']');
+            if !(closed && (buf.starts_with("http") || buf.starts_with("www"))) {
+                out.push('(');
+                out.push_str(&buf);
+                if closed {
+                    out.push(')');
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// 以首个关键词命中位置为中心截取片段：命中点前留 150 字上下文、总长 500 字。
+/// 先剥离链接目标再定位：段内常是 `[hh:mm:ss](https://…)`，URL 不清掉会挤占片段预算，
+/// 且窗口起点恰好落在 URL 中段时会被截成半截网址（`…w.youtube.com/watch?v=`）。
+fn make_snippet(para: &str, keywords: &[String]) -> String {
+    let cleaned = strip_link_targets(para);
+    let hit = keywords
+        .iter()
+        .filter_map(|k| cleaned.find(k.as_str()))
+        .map(|b| cleaned[..b].chars().count())
+        .min();
+    let (start, prefix) = match hit {
+        Some(p) if p > 150 => (p - 150, "…"),
+        _ => (0, ""),
+    };
+    let raw: String = cleaned.chars().skip(start).take(500).collect();
+    format!("{prefix}{raw}")
+}
+
+/// 单文件打分：文件级命中（路径/文件名/标题含关键词或卡名）整段加权，段落按关键词出现次数计分。
 fn score_file(
     p: &Path,
     root: &Path,
@@ -155,18 +285,29 @@ fn score_file(
     topic_ids: Option<&[String]>,
     hits: &mut Vec<CorpusHit>,
 ) {
-    let Ok(text) = std::fs::read_to_string(p) else { return };
+    let Ok(raw) = std::fs::read_to_string(p) else { return };
+    // 换行归一化：Windows 语料多为 CRLF，若直接按 "\n\n" 切段会失败
+    // （`\r\n\r\n` 中不含连续两个 `\n`），整篇被并成单段、又因以 `---` 开头被跳过
+    // —— 换行差异会让整份语料对检索静默不可见。
+    let text = raw.replace("\r\n", "\n").replace('\r', "\n");
     let rel = p
         .strip_prefix(root)
         .unwrap_or(p)
         .to_string_lossy()
         .replace('\\', "/");
-    let title = p
+    let stem = p
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
+    // 标题回退链：frontmatter title → 正文首个 H1 → 文件名（引用列表只展示标题，须可读）
+    let lines: Vec<&str> = text.lines().collect();
+    let (fm_title, body_from) = split_frontmatter(&lines);
+    let body: String = lines[body_from.min(lines.len())..].join("\n");
+    let title = fm_title
+        .or_else(|| first_h1(&body))
+        .unwrap_or_else(|| stem.clone());
 
-    // 文件级加成：路径或文件名直接命中关键词 / 命中主题卡 id → 该文件段落分数 ×2
+    // 文件级加成：路径/文件名/标题直接命中关键词 / 命中主题卡 id → 该文件段落分数 ×2
     // 注：不做文件级过滤（正文命中而文件名不命中的段落同样要被检出——文件名粗筛会漏检）
     let mut file_bonus = 1u32;
     if keywords.iter().any(|k| rel.contains(k.as_str()) || title.contains(k.as_str())) {
@@ -177,11 +318,11 @@ fn score_file(
         }
     }
 
-    // 段落打分（空行切分；截 500 字）
-    for para in text.split("\n\n") {
+    // 段落打分（空行切分）
+    for para in body.split("\n\n") {
         let para = para.trim();
         if para.is_empty() || para.starts_with("---") {
-            continue; // 跳过空段与 frontmatter
+            continue; // 跳过空段与残余 frontmatter
         }
         let mut score = 0u32;
         for k in keywords {
@@ -193,7 +334,7 @@ fn score_file(
         hits.push(CorpusHit {
             rel_path: rel.clone(),
             title: title.clone(),
-            snippet: para.chars().take(500).collect(),
+            snippet: make_snippet(para, keywords),
             score: score * file_bonus,
         });
     }

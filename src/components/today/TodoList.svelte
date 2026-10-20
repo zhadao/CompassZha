@@ -1,23 +1,9 @@
 <script lang="ts">
   import { app } from "../../stores/app.svelte";
+  import { parseTaskSegments, stripAllGoalTags } from "../../lib/markdown";
   import Icon from "../common/Icon.svelte";
   import TaskGoalMenu from "./TaskGoalMenu.svelte";
   import type { TaskItem } from "../../types/schema";
-
-  // #goal/xxx 文本标签识别（总需求 §2.3 任务标签系统，原型期识别展示）
-  interface Segment {
-    type: "text" | "goal";
-    value: string;
-  }
-
-  function parseSegments(text: string): Segment[] {
-    const parts = text.split(/(#goal\/[\w\u4e00-\u9fa5-]+)/g);
-    return parts
-      .filter((p) => p !== "")
-      .map((p) =>
-        p.startsWith("#goal/") ? { type: "goal" as const, value: p } : { type: "text" as const, value: p },
-      );
-  }
 
   let newTask = $state("");
   /** 任务右键关联板块菜单（v4.9）：{ task, 坐标 }，null = 关闭 */
@@ -45,6 +31,19 @@
   function onSchedule(id: string): void {
     app.scheduleTask(app.selectedDate, id);
     app.gotoSection("calendar");
+  }
+
+  /**
+   * D-2：以该任务为标题直接开**正计时**专注（不勾选任务）。
+   * 已有专注计时在跑时不打断，改为跳到番茄钟查看。
+   */
+  function onFocus(task: TaskItem): void {
+    if (app.timer.phase !== "idle") {
+      app.gotoSection("pomodoro");
+      return;
+    }
+    app.startStopwatch(stripAllGoalTags(task.text));
+    app.gotoSection("pomodoro");
   }
 </script>
 
@@ -85,7 +84,7 @@
             onclick={() => onToggle(t.id)}
           ></button>
           <div class="task-body">
-            {#each parseSegments(t.text) as seg, i (i)}
+            {#each parseTaskSegments(t.text) as seg, i (i)}
               {#if seg.type === "goal"}
                 <span class="goal-tag"><Icon name="tag" size={17} />{seg.value}</span>
               {:else}
@@ -97,6 +96,14 @@
             {/if}
           </div>
           <div class="task-actions">
+            <button
+              class="act focus-act"
+              title="开始专注（正计时，以本任务为标题）"
+              aria-label="开始专注"
+              onclick={() => onFocus(t)}
+            >
+              ▶
+            </button>
             <button class="act" title="排上日历" onclick={() => onSchedule(t.id)}>
               <Icon name="calendar" size={21} />
             </button>
@@ -113,7 +120,7 @@
   {/if}
 
   <p class="tip">
-    提示：勾选会立即生效；「顺延」把任务移到明天清单；<b>右键任务</b>可关联/取消关联人生板块。
+    提示：勾选会立即生效；悬停任务行可「▶ 开始专注」「排上日历」「顺延」「删除」；<b>右键任务</b>可关联/取消关联人生板块。
   </p>
 </section>
 
@@ -259,6 +266,16 @@
   .act:hover {
     background-color: var(--color-surface-alt);
     color: var(--color-text-primary);
+  }
+
+  /* D-2：「▶ 开始专注」按钮（正计时）；尺寸与同排 21px 图标对齐 */
+  .focus-act {
+    align-items: center;
+    justify-content: center;
+    width: 21px;
+    height: 21px;
+    font-size: var(--font-size-xs);
+    line-height: 1;
   }
 
   .act.danger:hover {

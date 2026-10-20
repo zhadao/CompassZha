@@ -103,7 +103,7 @@
     </svg>
 
     <div class="title">CompassZha</div>
-    <div class="tagline">人生仪表盘</div>
+    <div class="tagline">你的方向罗盘</div>
   </div>
 </div>
 
