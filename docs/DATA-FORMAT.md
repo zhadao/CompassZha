@@ -77,6 +77,10 @@ goals: []
 | `goals` | 数组 | 目标（保留字段） |
 
 > 应用只管理上表中列出的**指标键**；其它任何自定义 frontmatter 字段都会原样保留。
+>
+> **自定义追踪项**（设置 → 数据追踪 里新建）以 `x_<英文标识>` 为键写入同一份 frontmatter，
+> 例如 `x_reading: 40`、`x_wake_mood: 4`、`x_gym: true`、`x_meditate_time: "07:30"`。
+> 删掉某个追踪项不会删除已有 `x_` 键——历史数据原样留在文件里，只是不再显示。
 
 ### 2.3 章节格式
 
@@ -171,12 +175,18 @@ icon: 💪
 
 ```json
 {
-  "version": 5,
-  "data_root": "D:\\Coding\\CompassZha",
+  "version": 6,
+  "data_root": "",
   "paths": { "daily": "daily", "life": "life", "corpus": "corpus" },
   "git": { "enabled": false, "branch": "main", "remote": "" },
   "ai": { "provider": "deepseek", "base_url": "https://api.deepseek.com", "model": "deepseek-chat" },
   "ai_companion": { "enabled": false, "kind": "solomd" },
+  "calendar": { "slot_min": "06:00", "slot_max": "24:00", "px_per_hour": 175,
+                "ticks": { "every_hours": 1, "times": [] } },
+  "ui": { "detail_by_section": { "today": true }, "calendar_daily_visible": true,
+          "calendar_view_mode": "timeline", "chat_guide_seen": false },
+  "trackers": [],
+  "briefing": { "enabled": false, "weekday": 0, "time": "20:00", "last_shown": null },
   "corpus_topics": [
     { "id": "career", "name": "职业与方向" }
   ]
@@ -185,10 +195,14 @@ icon: 💪
 
 | 字段 | 说明 |
 | --- | --- |
-| `data_root` | 数据根目录覆盖值；仅在**默认根目录**的 `config.json` 中读取，用于把数据挪到别处 |
+| `data_root` | 数据根目录覆盖值；仅在**默认根目录**的 `config.json` 中读取，用于把数据挪到别处（留空 = 用默认根目录） |
 | `paths` | 三个业务目录相对根目录的名称 |
 | `git.enabled` / `git.remote` | 远端推送开关与地址（阶段五启用；默认关闭且不推送） |
 | `ai.*` | AI 服务的接口地址与模型名 |
+| `calendar.*` | 日历时间范围（`slot_min` / `slot_max`）、时间轴缩放（`px_per_hour`）与刻度线（`every_hours` / `times`） |
+| `ui.*` | 右栏详情按分区记忆、日历左侧日程栏显隐、日历视图（`timeline` / `todo`）、隆中对首开引导是否已看过 |
+| `trackers` | 自定义追踪项数组（`key` 为 `x_<slug>`，含 `name` / `unit` / `kind` / `hidden` 等）；缺省 = 只有内置九项 |
+| `briefing.*` | 每周罗盘简报：`enabled`、`weekday`（周日 = 0 … 周六 = 6）、`time`（HH:mm）、`last_shown`（上次弹出时刻，用于错过补发） |
 | `corpus_topics` | 语料检索的主题标签表 |
 
 > **安全约定**：任何 API Key、令牌、密码都**不会**写入 `config.json`，也不会进入 git 仓库——

@@ -17,8 +17,6 @@ Markdown 文件保存在你自己的硬盘上——没有云端、没有账号�
 **今天该干什么 / 今天状态怎么样 / 我这个人在往哪走**，分别对应「今日清单与日历日程」「量化指标与
 趋势曲线」「人生板块与板块投入热力图」三组模块。
 
-> 界面截图将在首次公开发布时补上（今日 / 日历 / 仪表盘各一张，实机真实数据、无修饰）。
-
 ## 下载
 
 前往 [**Releases**](https://github.com/zhadao/CompassZha/releases/latest) 下载（当前最新 **v0.3.0**，
@@ -318,7 +316,7 @@ CompassZha/
 │  │  ├─ chat/                     # 隆中对：对话线程、索引卡编辑、语料转化、说明
 │  │  ├─ common/                   # 通用组件（Crepe 编辑器封装等）
 │  │  ├─ manual/                   # 内置说明书（外壳 + 章节内容 + 设置页入口按钮）
-│  │  └─ settings/                 # 设置分区（数据目录 / git 同步 / AI 配置）
+│  │  └─ settings/                 # 设置分区（目录导航 / 同步 / AI / 窗口 / 数据 / 外观 / 日历 / 数据追踪 / 每周简报）
 │  ├─ stores/app.svelte.ts         # 全局状态单例，组件与数据源之间的唯一接缝
 │  ├─ lib/
 │  │  ├─ markdown.ts               # Markdown 解析与「章节级写回」
@@ -405,8 +403,9 @@ Highlights:
   renaming (`star-yyyy-mm-dd.md`).
 - Tasks, a FullCalendar-based schedule whose events are written back into the day's Markdown file,
   and a dual-mode Pomodoro timer (countdown + stopwatch) that logs to `## 专注记录`.
-- A dashboard with eight metric cards, seven switchable (7 / 30 / 90-day) trend lines, and
-  GitHub-contribution-style heatmaps per life area based on `#goal/<area>` tag mentions.
+- A dashboard with metric cards (nine built-in plus your own custom trackers), switchable
+  (7 / 30 / 90-day) trend lines, and GitHub-contribution-style heatmaps per life area based on
+  `#goal/<area>` tag mentions.
 - **Longzhongdui (corpus chat)**: drop any Markdown into `corpus\` (no folders needed) and ask questions — the AI
   retrieves from your local corpus first, answers with citations, and says so plainly when the corpus
   has nothing to support an answer.
@@ -431,4 +430,3 @@ CompassZha 站在以下开源项目的肩膀上（设置页底部「软件作者
 - [ECharts](https://github.com/apache/echarts) — 趋势图表
 - [usememos/memos](https://github.com/usememos/memos) — 界面风格参考（仅视觉借鉴，未使用其代码）
 
-。
